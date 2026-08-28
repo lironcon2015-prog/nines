@@ -5,13 +5,18 @@ import { mountBooklet } from './booklet.js';
 import { renderLibrary } from './library.js';
 import { mountQuiz, buildQuestions } from './quiz.js';
 import { mountVideos } from './videolib.js';
-import { videoCount } from './videos.js';
+import { mountShare } from './sharelib.js';
+import { migrate } from './videos.js';
+import * as cloud from './cloud.js';
 import { migrateLegacy, dailyPicks } from './store.js';
 
 const $ = id => document.getElementById(id);
 
 /* קישור שהגיע משיתוף חיצוני, ממתין למסך הסרטונים */
 let shared = null;
+
+/* פרטי הצטרפות שהגיעו בקישור, ממתינים למסך הספרייה המשותפת */
+let joining = null;
 
 async function getJSON(url) {
   const res = await fetch(url, { cache: 'no-cache' });
@@ -28,6 +33,10 @@ function parseHash() {
   /* האימון הקצר. התרחישים נבחרים בכל כניסה מחדש ולכן אינם בכתובת */
   if (parts[0] === 't' && parts[1]) return { view: 'train', id: parts[1] };
   if (parts[0] === 'v') return { view: 'videos' };
+  if (parts[0] === 's') return { view: 'share' };
+  /* קישור הצטרפות שנשלח בוואטסאפ. הכתובת וקוד הקריאה יושבים בתוכו,
+     ולכן אין מה להקליד — הוא נפתח ישר במסך האישור. */
+  if (parts[0] === 'join' && parts[1]) return { view: 'share', join: parts[1] };
   if (parts[0] === 'x' && parts[1]) return { view: 'shared', data: parts[1] };
   return { view: 'library' };
 }
@@ -47,6 +56,10 @@ function decodeShared(data) {
 }
 
 async function boot() {
+  /* התמונות עוברות מתוך המסמך ל-IndexedDB, ומצבות מגרסה קודמת מנוקות.
+     חייב לרוץ לפני שמסך כלשהו קורא את הספרייה. */
+  await migrate().catch(err => console.error(err));
+
   const index = await getJSON('content/booklets.json');
   const formations = await getJSON('content/formations.json');
   const booklets = (await Promise.all(
@@ -77,7 +90,7 @@ async function boot() {
   }
 
   function screens(active) {
-    ['library', 'booklet', 'quiz', 'videos'].forEach(id => { $(id).hidden = id !== active; });
+    ['library', 'booklet', 'quiz', 'videos', 'share'].forEach(id => { $(id).hidden = id !== active; });
   }
 
   function show(route) {
@@ -89,6 +102,16 @@ async function boot() {
       const prefill = shared;
       shared = null;
       current = mountVideos(prefill);
+      window.scrollTo(0, 0);
+      return;
+    }
+
+    if (route.view === 'share') {
+      screens('share');
+      /* גם כאן פעם אחת: אחרי ההצטרפות רענון לא אמור לשאול שוב */
+      const invite = route.join ? cloud.decodeJoin(route.join) : joining;
+      joining = null;
+      current = mountShare(invite);
       window.scrollTo(0, 0);
       return;
     }
@@ -147,8 +170,6 @@ async function boot() {
     } else {
       screens('library');
       renderLibrary(home, booklets, formations, openBooklet, openQuiz, openTrain, index.version);
-      const n = videoCount();
-      $('videosn').textContent = n ? ' · ' + n : '';
     }
     window.scrollTo(0, 0);
   }
@@ -172,6 +193,7 @@ async function boot() {
   if (legacy && !location.hash) history.replaceState(null, '', '#/b/' + legacy);
 
   $('videosgo').onclick = () => { location.hash = '#/v'; };
+  $('sharego').onclick = () => { location.hash = '#/s'; };
 
   document.documentElement.classList.remove('loading');
   $('state').style.display = 'none';

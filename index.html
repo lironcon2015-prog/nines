@@ -20,7 +20,7 @@
 
   <div class="state" id="state">טוען…</div>
 
-  <!-- ===== מסך הבית: החוברות ===== -->
+  <!-- ===== מסך הבית ===== -->
   <section id="library" hidden>
     <div class="eyebrow" id="lib-eyebrow"></div>
     <h1 id="lib-title"></h1>
@@ -30,9 +30,17 @@
 
     <button id="install" type="button">התקן את האפליקציה על המסך</button>
 
-    <div class="cards" id="cards"></div>
+    <!-- התפקיד שנבחר: כרטיס אחד גדול. או הבוחר, כשעוד לא נבחר מספר. -->
+    <div id="hero"></div>
 
-    <button id="videosgo" type="button">ספריית הסרטונים<span id="videosn"></span></button>
+    <!-- וכל השאר, מקופל -->
+    <details class="roles" id="roles" hidden>
+      <summary id="roles-sum">ספריית התפקידים</summary>
+      <div class="rolelist" id="rolelist"></div>
+    </details>
+
+    <button id="videosgo" type="button">ספריית הסרטונים<span id="videosn"></span><span class="videostag" id="videostag" hidden></span></button>
+    <button id="sharego" type="button">ספרייה משותפת</button>
 
     <p class="foot"><span id="lib-foot"></span><span class="ver" id="lib-ver"></span></p>
   </section>
@@ -133,7 +141,9 @@
 
     <div class="eyebrow">סרטונים ששווה לראות שוב</div>
     <h1>ספריית הסרטונים</h1>
-    <p class="lede">מדביקים קישור מיוטיוב, אינסטגרם, פייסבוק או טיקטוק, ובוחרים כותרת. הסרטונים נשמרים על המכשיר הזה.</p>
+    <p class="lede" id="v-lede"></p>
+
+    <div class="vsync" id="v-sync" hidden></div>
 
     <details class="vform" id="v-form">
       <summary id="v-formtitle">הוסף סרטון</summary>
@@ -177,7 +187,15 @@
 
     <div class="vlist" id="v-list"></div>
 
-    <p class="foot">הסרטונים נשמרים על המכשיר הזה בלבד. הקישורים לא מועלים לשום מקום, והצפייה עצמה נעשית בפלטפורמה שממנה הגיע הסרטון.</p>
+    <p class="foot" id="v-foot"></p>
+  </section>
+
+  <!-- ===== מסך הספרייה המשותפת ===== -->
+  <section id="share" hidden>
+    <a class="back" href="#/" id="s-back">חזרה לחוברות ←</a>
+    <div class="eyebrow">דרייב · בלי חשבון ובלי סיסמה</div>
+    <h1 id="s-title">ספרייה משותפת</h1>
+    <div id="s-body"></div>
   </section>
 
 </div>
