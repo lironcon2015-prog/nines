@@ -11,7 +11,7 @@ import {
   listCategories, addCategory, renameCategory, removeCategory, countByCategory,
   listVideos, addVideo, updateVideo, removeVideo, categoryName,
   platformName, embedUrl, embedBlocked, isPortrait, playable,
-  posterCandidates, needsPoster, needsDownload, thumbUrl, normalizeUrl, videoCount,
+  posterCandidates, needsPoster, needsDownload, needsUpload, thumbUrl, normalizeUrl, videoCount,
   readOnly, exportDoc, applyRemote, reload
 } from './videos.js';
 import { needsResolve, lookup, refreshMedia, fetchPoster, probe } from './preview.js';
@@ -730,6 +730,7 @@ async function savePoster(id, src, log) {
    בהרבה ממשיכה מהרשת, ולכן היא קודמת ומקבלת מכסה גדולה יותר. */
 const BACKFILL = 8;
 const DOWNLOAD = 20;
+const UPLOAD = 20;
 
 let filling = false;
 
@@ -747,6 +748,19 @@ async function backfillPosters(repaint) {
         try {
           const blob = await cloud.getPoster(v.posterRef);
           if (blob && await posters.put(v.id, blob)) { changed = true; saved.add(v.id); }
+        } catch (e) { break; }   /* הסקריפט לא עונה — אין טעם להמשיך */
+      }
+    }
+
+    /* ואחר כך ההפך: תמונות ששמורות כאן ועוד לא עלו לתיקייה. אלה הן כל
+       הסרטונים שהיו בספרייה לפני החיבור — בלי המעבר הזה הרשימה הייתה
+       מגיעה לצד השני בלי התמונות שלה. */
+    if (cloud.isOn() && !cloud.isViewer()) {
+      for (const v of needsUpload(saved).slice(0, UPLOAD)) {
+        try {
+          const blob = await posters.blob(v.id);
+          const ref = blob ? await cloud.putPoster(v.id, blob) : null;
+          if (ref) { updateVideo(v.id, { posterRef: ref }); changed = true; }
         } catch (e) { break; }   /* הסקריפט לא עונה — אין טעם להמשיך */
       }
     }

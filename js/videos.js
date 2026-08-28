@@ -358,6 +358,16 @@ export function needsDownload(savedIds) {
   return listVideos().filter(v => v.posterRef && !(savedIds && savedIds.has(v.id)));
 }
 
+/** ההפך: תמונה ששמורה כאן אבל עוד לא עלתה לתיקייה המשותפת.
+
+    זה מה שקורה לכל הסרטונים שהיו בספרייה לפני החיבור — התמונה שלהם
+    נשמרה במכשיר, ולכן היא לא נכנסת ל-needsPoster, ובלי המעבר הזה היא
+    לא הייתה עולה לעולם. הרשימה הייתה מגיעה לצד השני בשלמותה, אבל בלי
+    התמונות — וזה בדיוק ההבדל בין "אותה ספרייה" ל"אותה רשימה". */
+export function needsUpload(savedIds) {
+  return listVideos().filter(v => !v.posterRef && savedIds && savedIds.has(v.id));
+}
+
 /** כתובות התמונה של הכרטיס לפי סדר עדיפות. blobUrl מגיע מ-posters.url() */
 export function posterCandidates(video, blobUrl) {
   return [blobUrl, video.posterUrl, thumbUrl(video.full || video.url)].filter(Boolean);
