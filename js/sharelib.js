@@ -47,6 +47,12 @@ function field(parent, label, attrs) {
   l.textContent = label;
   const input = document.createElement('input');
   Object.assign(input, attrs || {});
+  /* כתובת וקוד אינם מילים: תיקון אוטומטי, רישיות אוטומטית ופיסוק חכם
+     רק הורסים אותם. הניקוי ב-cloud.js מטפל במה שכבר נדבק, וזה מונע
+     מלכתחילה. */
+  input.setAttribute('autocorrect', 'off');
+  input.setAttribute('autocapitalize', 'off');
+  input.setAttribute('spellcheck', 'false');
   l.appendChild(input);
   parent.appendChild(l);
   return input;

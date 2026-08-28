@@ -22,6 +22,21 @@ const TIMEOUT = 20000;
    זו התבנית המקובלת מול Apps Script, לא עקיפה. */
 const PLAIN = { 'Content-Type': 'text/plain;charset=utf-8' };
 
+/* הדבקה מתוך טקסט בעברית מביאה איתה סימני כיווניות בלתי-נראים — LRM,
+   RLM, ותווי בידוד — ולפעמים גם רוחב-אפס. הם אינם רווחים, ולכן trim
+   אינו נוגע בהם, והם שברו את בדיקת הכתובת ואת השוואת הקוד על תו שאי
+   אפשר לראות בשדה. זה קורה בדיוק כשמעתיקים את הכתובת מתוך הודעה
+   בעברית, שזו הדרך הסבירה ביותר להגיע לכאן. */
+const INVISIBLE = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g;
+
+/* iOS מחליף לפעמים מקף במקף טיפוגרפי. מזהה של פריסה ושל קוד בנויים
+   מ-base64url, שבו המקף חוקי והמקף הטיפוגרפי אינו קיים כלל. */
+const DASHES = /[\u2010-\u2015\u2212]/g;
+
+function tidy(text) {
+  return String(text || '').replace(INVISIBLE, '').replace(DASHES, '-').trim();
+}
+
 let conf = read();
 
 function read() {
@@ -96,11 +111,14 @@ async function call(op, payload, target) {
 
 /** בדיקת כתובת וקוד. מחזירה {mode,name} — מי שהקוד הזה הופך אותך להיות. */
 export async function ping(url, code) {
-  const clean = String(url || '').trim();
+  const clean = tidy(url);
   if (!/^https:\/\/script\.google\.com\/.*\/exec$/.test(clean)) {
-    throw new Error('הכתובת צריכה להיות כתובת של Apps Script שמסתיימת ב-/exec');
+    /* הכתובת שהתקבלה באמת, ולא רק "לא תקינה": כשהשדה נראה נכון והבדיקה
+       בכל זאת נכשלת, זו הדרך היחידה לראות מה בעצם יושב בו. */
+    throw new Error('הכתובת צריכה להתחיל ב-https://script.google.com ולהסתיים ב-/exec. '
+      + 'מה שהתקבל: ' + (clean.slice(0, 60) || '(ריק)'));
   }
-  const at = { url: clean, code: String(code || '').trim() };
+  const at = { url: clean, code: tidy(code) };
   const out = await call('ping', null, at);
   /* קוד הקריאה מוחזר רק לבעלים — זה מה שהוא שולח הלאה, והצופה אינו
      צריך אותו ואינו מקבל אותו. */
@@ -168,7 +186,7 @@ export function joinPayload(readCode) {
 }
 
 export function decodeJoin(text) {
-  const raw = String(text || '').trim();
+  const raw = tidy(text);
   if (!raw) return null;
   /* מתקבל גם קישור שלם שהודבק, לא רק המטען עצמו */
   const inHash = raw.match(/#\/join\/([A-Za-z0-9_-]+)/);
