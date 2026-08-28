@@ -6,12 +6,13 @@
    שירות פותר גם קישור מקוצר — fb.watch ו-facebook.com/share הם הפניות,
    והנגן המשובץ של פייסבוק אינו הולך אחריהן.
 
-   ארבעה ספקים ולא אחד, כי כל אחד מהם נופל לפעמים ולכל אחד יש עיוורון
-   אחר: microlink מחזיר הכול מוכן אבל מוגבל בכמות, r.jina.ai מחזיר כתובת
-   סופית וכותרת אבל לא תמונה, ושני האחרונים מחזירים HDML גולמי שממנו
-   שולפים בעצמנו. מה שספק אחד לא ידע, הבא מנסה להשלים. */
+   כשהספרייה המשותפת מוגדרת, הסקריפט שבדרייב הוא השירות: הוא רץ בחשבון
+   שלך, אין לו מגבלת בקשות מעשית, והוא לא כפוף ל-CORS בכלל. ארבעת
+   השירותים החינמיים נשארים מתחתיו כנפילה, למי שעדיין לא הקים סקריפט —
+   כל אחד מהם נופל לפעמים ולכל אחד יש עיוורון אחר. */
 
 import { normalizeUrl, embedUrl, detectPlatform, thumbUrl } from './videos.js';
+import * as cloud from './cloud.js';
 
 const TIMEOUT = 8000;
 /* תקרה לכל החיפוש. בלי זה, ארבעה ספקים תקועים היו מחזיקים את כפתור
@@ -21,9 +22,9 @@ const BUDGET = 15000;
 /* AbortSignal.timeout קיים רק מ-Safari 16, ובאייפון ישן יותר הוא זורק
    מיד — כלומר כל הספקים נכשלים בבת אחת עוד לפני שיצאה בקשה אחת.
    AbortController קיים מאז ומתמיד, ולכן הפסק הזמן נבנה ידנית. */
-function withTimeout(url) {
+function withTimeout(url, ms) {
   const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
-  const timer = setTimeout(() => { if (ctrl) ctrl.abort(); }, TIMEOUT);
+  const timer = setTimeout(() => { if (ctrl) ctrl.abort(); }, ms || TIMEOUT);
   const options = ctrl ? { signal: ctrl.signal } : {};
   return fetch(url, options).finally(() => clearTimeout(timer));
 }
@@ -94,6 +95,19 @@ export async function lookup(url) {
   const playable = () => out.media || embedUrl(url) || (out.full && embedUrl(out.full));
   const enough = () => out.title && out.image && playable();
 
+  /* הסקריפט שלך קודם. הוא היחיד שאינו מוגבל בבקשות ואינו נופל לסירוגין,
+     ולכן כשהוא מצליח אין שום סיבה להעיר אף אחד אחר. */
+  if (cloud.isOn()) {
+    try {
+      const got = await cloud.preview(url);
+      take(got, url, out);
+      out.log.push('הסקריפט שלך: ' + found(out));
+    } catch (e) {
+      out.log.push('הסקריפט שלך: ' + reason(e));
+    }
+    if (enough()) return out;
+  }
+
   /* הספק הראשון לבדו, כי בדרך כלל הוא מספיק — ואז יצאה בקשה אחת בלבד.
      רק אם הוא לא סגר את העניין, נשלחים השאר, וביחד ולא בזה אחר זה:
      בטור, שני ספקים תקועים אכלו שש-עשרה שניות לפני שהשלישי בכלל התחיל. */
@@ -118,31 +132,39 @@ async function visit(provider, url, out) {
   try {
     const res = await withTimeout(provider.build(url));
     if (!res.ok) { out.log.push(provider.id + ': ' + res.status); return; }
-    const got = await provider.read(res);
-
-    /* כתובת מתקבלת רק אם הנגן באמת יודע לפתוח אותה, אחרת החלפנו קישור
-       תקין באחר שגם הוא לא ינוגן */
-    if (!out.full && got.full) {
-      const clean = normalizeUrl(unwrap(got.full));
-      if (clean && embedUrl(clean)) out.full = clean;
-    }
-    if (!out.media && got.media) {
-      const file = normalizeUrl(got.media);
-      /* og:video אינו תמיד קובץ: ביוטיוב ובטיקטוק הוא דף נגן, וניסיון
-         לנגן דף HTML בתגית video נכשל בוודאות. מתקבל רק מה שנראה כמו
-         קובץ וידאו אמיתי — וזה בדיוק מה שפייסבוק ואינסטגרם נותנות. */
-      if (file && isVideoFile(file)) out.media = file;
-    }
-    if (!out.title && got.title) out.title = clean_title(got.title);
-    if (!out.image && got.image) out.image = normalizeUrl(got.image);
-
-    out.log.push(provider.id + ': ' + ([
-      out.media ? 'קובץ' : '', out.full ? 'כתובת' : '',
-      out.title ? 'שם' : '', out.image ? 'תמונה' : ''
-    ].filter(Boolean).join(' + ') || 'בלי כלום'));
+    take(await provider.read(res), url, out);
+    out.log.push(provider.id + ': ' + found(out));
   } catch (e) {
     out.log.push(provider.id + ': ' + reason(e));
   }
+}
+
+/* מה שספק אחד לא ידע, הבא מנסה להשלים — ולכן כל שדה נלקח רק אם הוא
+   עדיין חסר, ואף ספק אינו דורס תשובה שכבר התקבלה. */
+function take(got, url, out) {
+  if (!got) return;
+  /* כתובת מתקבלת רק אם הנגן באמת יודע לפתוח אותה, אחרת החלפנו קישור
+     תקין באחר שגם הוא לא ינוגן */
+  if (!out.full && got.full) {
+    const clean = normalizeUrl(unwrap(got.full));
+    if (clean && embedUrl(clean)) out.full = clean;
+  }
+  if (!out.media && got.media) {
+    const file = normalizeUrl(got.media);
+    /* og:video אינו תמיד קובץ: ביוטיוב ובטיקטוק הוא דף נגן, וניסיון
+       לנגן דף HTML בתגית video נכשל בוודאות. מתקבל רק מה שנראה כמו
+       קובץ וידאו אמיתי — וזה בדיוק מה שפייסבוק ואינסטגרם נותנות. */
+    if (file && isVideoFile(file)) out.media = file;
+  }
+  if (!out.title && got.title) out.title = clean_title(got.title);
+  if (!out.image && got.image) out.image = normalizeUrl(got.image);
+}
+
+function found(out) {
+  return [
+    out.media ? 'קובץ' : '', out.full ? 'כתובת' : '',
+    out.title ? 'שם' : '', out.image ? 'תמונה' : ''
+  ].filter(Boolean).join(' + ') || 'בלי כלום';
 }
 
 const VIDEO_FILE = /\.(mp4|m4v|webm|mov|m3u8|mpd)$/i;
@@ -160,10 +182,21 @@ function reason(e) {
   return ((e.name || 'שגיאה') + ': ' + (e.message || '')).trim().slice(0, 90);
 }
 
-/** בדיקה יזומה: מה כל ספק עונה על כתובת ידועה. לאבחון כשמשהו לא עובד. */
+/** בדיקה יזומה: מה כל שירות עונה על כתובת ידועה. לאבחון כשמשהו לא עובד. */
 export async function probe() {
   const target = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
   const lines = [];
+  if (cloud.isOn()) {
+    const started = Date.now();
+    try {
+      await cloud.preview(target);
+      lines.push('הסקריפט שלך: עונה (' + (Date.now() - started) + 'ms)');
+    } catch (e) {
+      lines.push('הסקריפט שלך: ' + reason(e));
+    }
+  } else {
+    lines.push('הסקריפט שלך: לא מוגדר');
+  }
   for (const provider of PROVIDERS) {
     const started = Date.now();
     try {
@@ -175,6 +208,55 @@ export async function probe() {
     }
   }
   return lines;
+}
+
+/* --- הבאת התמונה עצמה ---
+
+   כאן היה הכשל שגרם לתמונות להיעלם. הגרסה הקודמת טענה את התמונה בתגית
+   img עם crossOrigin="anonymous" כדי לצייר אותה על בד; כשה-CDN של
+   אינסטגרם ופייסבוק לא החזיר כותרת CORS — וזה הרוב — הטעינה נכשלה
+   ונשמרה **הכתובת** במקום התמונה. הכתובת חתומה, היא פגה תוך ימים, ואז
+   הכרטיס נשאר ריק בלי שאיש ידע למה.
+
+   הפתרון הוא להביא קודם את הבייטים, ורק אחר כך לצייר: מ-Blob נבנית
+   כתובת blob: שהיא מאותו מקור, ולכן הבד לעולם אינו מלוכלך ו-CORS מפסיק
+   להיות תנאי. שלוש דרכים להשיג את הבייטים, לפי הסדר. */
+
+const BYTE_PROXIES = [
+  { id: 'allorigins', build: u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u) },
+  { id: 'codetabs', build: u => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u) }
+];
+
+/** הבייטים של התמונה, או null. log מקבל שורה לכל ניסיון. */
+export async function fetchPoster(src, log) {
+  if (!src) return null;
+  const note = line => { if (log) log.push('תמונה · ' + line); };
+
+  /* ישירות קודם: i.ytimg.com ורוב שרתי התמונות כן מרשים, וזו בקשה אחת
+     בלי אף מתווך. הכישלון מהיר, ולכן זה לא עולה כמעט כלום. */
+  try {
+    const res = await withTimeout(src);
+    if (res.ok) {
+      const blob = await res.blob();
+      if (blob && blob.size) { note('ישירות'); return blob; }
+    }
+  } catch (e) { /* חסום — ממשיכים למתווכים */ }
+
+  for (const proxy of BYTE_PROXIES) {
+    try {
+      const res = await withTimeout(proxy.build(src));
+      if (!res.ok) { note(proxy.id + ': ' + res.status); continue; }
+      const blob = await res.blob();
+      /* מתווך שנכשל מחזיר לפעמים דף שגיאה עם קוד 200. תמונה אמיתית היא
+         image/* וגם אינה זעירה — שתי בדיקות זולות שחוסכות תמונה פגומה
+         שנשמרת לתמיד. */
+      if (blob && blob.size > 512 && /^image\//.test(blob.type || '')) { note(proxy.id); return blob; }
+      note(proxy.id + ': לא תמונה');
+    } catch (e) {
+      note(proxy.id + ': ' + reason(e));
+    }
+  }
+  return null;
 }
 
 /* --- שליפה מ-HTML גולמי --- */
@@ -222,78 +304,4 @@ function unwrap(raw) {
   const inner = url.searchParams.get('next') || url.searchParams.get('u');
   if (!inner) return url.toString();
   try { return new URL(inner).toString(); } catch (e) { return url.toString(); }
-}
-
-/* --- שמירת התמונה על המכשיר ---
-   כתובת תמונה של פייסבוק ואינסטגרם נושאת חתימה שפגה אחרי זמן מה, וכעבור
-   שבוע התמונה הייתה נעלמת מהספרייה. לכן היא מוקטנת ונשמרת כתמונה עצמה.
-
-   720 פיקסלים ולא פחות: הכרטיס תופס את כל רוחב המסך, ובטלפון עם צפיפות
-   של שלושה פיקסלים למסך זה כאלף פיקסלים אמיתיים. תמונה של 240 נראית
-   מרוחה בדיוק במקום שבו היא אמורה לספר מה הסרטון. כ-45KB לתמונה, ואם
-   האחסון יתמלא save() מוותרת על הישנות. */
-
-const POSTER_WIDTH = 720;
-const POSTER_MAX = 150 * 1024;
-
-export function cachePoster(src) {
-  return new Promise(resolve => {
-    if (!src || src.startsWith('data:')) { resolve(src || null); return; }
-
-    /* שרת תמונות שאינו עונה אינו סיבה לתקוע את השמירה. אחרי פסק הזמן
-       נשמרת הכתובת עצמה, והכרטיס ינסה לטעון אותה כשיוצג. */
-    let settled = false;
-    const finish = value => { if (!settled) { settled = true; clearTimeout(timer); resolve(value); } };
-    const timer = setTimeout(() => finish(src), TIMEOUT);
-
-    const img = new Image();
-    /* בלי crossOrigin הציור מלכלך את הבד ו-toDataURL נחסם. שרת שלא מרשה
-       יפיל את הטעינה, ואז נשמרת הכתובת עצמה כמו שהיא. */
-    img.crossOrigin = 'anonymous';
-    img.referrerPolicy = 'no-referrer';
-    img.onerror = () => finish(src);
-    img.onload = async () => {
-      /* onload אומר שהבייטים הגיעו, לא שהתמונה פוענחה. ציור לפני הפענוח
-         מייצר בד ריק, ובד ריק שנשמר כ-JPEG יוצא **שחור** — בדיוק התמונה
-         השחורה שהופיעה בכרטיסים. decode ממתין לפענוח בפועל. */
-      if (img.decode) { try { await img.decode(); } catch (e) { /* נמשיך ונבדוק */ } }
-      try {
-        const scale = Math.min(1, POSTER_WIDTH / img.naturalWidth);
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.round(img.naturalWidth * scale);
-        canvas.height = Math.round(img.naturalHeight * scale);
-        if (!canvas.width || !canvas.height) { finish(src); return; }
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        /* ואם למרות הכול יצא בד ריק — עדיף הכתובת המקורית על תמונה
-           שחורה שנשמרת לתמיד ומחליפה את התמונה האמיתית */
-        if (blank(ctx, canvas)) { finish(src); return; }
-        const data = canvas.toDataURL('image/jpeg', 0.72);
-        finish(data.length > POSTER_MAX ? src : data);
-      } catch (e) {
-        finish(src);   /* בד מלוכלך — נשמרת הכתובת */
-      }
-    };
-    img.src = src;
-  });
-}
-
-/* דגימה של תשע נקודות. תמונה אמיתית של מגרש או של אולם כמעט לעולם אינה
-   אחידה לגמרי, ובד שלא צויר עליו כלום הוא שקוף — כלומר אלפא אפס. */
-function blank(ctx, canvas) {
-  const xs = [0.1, 0.5, 0.9];
-  let opaque = 0;
-  let first = null;
-  let varied = false;
-  for (const x of xs) {
-    for (const y of xs) {
-      const px = ctx.getImageData(
-        Math.floor(canvas.width * x), Math.floor(canvas.height * y), 1, 1).data;
-      if (px[3] > 8) opaque++;
-      const key = px[0] + ',' + px[1] + ',' + px[2];
-      if (first === null) first = key;
-      else if (key !== first) varied = true;
-    }
-  }
-  return opaque === 0 || !varied;
 }
