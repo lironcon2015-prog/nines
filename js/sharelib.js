@@ -101,8 +101,25 @@ function drawSetup(box, repaint) {
   err.hidden = true;
   form.appendChild(err);
 
+  /* מה שבאמת היה בשדה, בשורה משלו ובכיוון שמאל-לימין. כשכתובת נראית
+     תקינה והבדיקה בכל זאת נכשלת, זו הדרך היחידה לראות למה — וצילום מסך
+     אחד של השורה הזאת מספיק כדי לאבחן. */
+  const detail = document.createElement('code');
+  detail.className = 'surl vdetail';
+  detail.hidden = true;
+  form.appendChild(detail);
+
+  const showError = e => {
+    err.hidden = false;
+    err.textContent = (e && e.message) || 'לא הצלחנו להתחבר';
+    const extra = e && e.detail;
+    detail.hidden = !extra;
+    detail.textContent = extra || '';
+  };
+
   const go = button(form, 'sgo', 'התחבר', async () => {
     err.hidden = true;
+    detail.hidden = true;
     go.disabled = true;
     go.textContent = 'בודק…';
     try {
@@ -114,8 +131,7 @@ function drawSetup(box, repaint) {
       await firstSync();
       repaint();
     } catch (e) {
-      err.hidden = false;
-      err.textContent = (e && e.message) || 'לא הצלחנו להתחבר';
+      showError(e);
     } finally {
       go.disabled = false;
       go.textContent = 'התחבר';
