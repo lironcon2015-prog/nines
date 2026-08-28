@@ -86,8 +86,8 @@ function drawSetup(box, repaint) {
     type: 'url', id: 's-url', placeholder: 'https://script.google.com/macros/s/…/exec',
     autocomplete: 'off', value: ''
   });
-  const code = field(form, 'הקוד שלך', {
-    type: 'text', id: 's-code', placeholder: 'קוד הכתיבה מתוך הסקריפט', autocomplete: 'off'
+  const code = field(form, 'קוד הכתיבה', {
+    type: 'text', id: 's-code', placeholder: 'הקוד שהסקריפט הדפיס ביומן', autocomplete: 'off'
   });
 
   const err = document.createElement('p');
@@ -123,11 +123,10 @@ function drawSetup(box, repaint) {
   how.appendChild(sum);
   const list = document.createElement('ol');
   [
-    'פתח תיקייה חדשה בדרייב בשם "תשיעיות".',
-    'היכנס ל-script.google.com, פרויקט חדש, והדבק את הקוד מהקובץ apps-script/Code.gs שבמאגר.',
-    'בראש הקובץ מלא את מזהה התיקייה ואת שני הקודים — אחד לכתיבה ואחד לקריאה.',
+    'היכנס ל-script.google.com, פרויקט חדש, והדבק את הקוד מהקובץ apps-script/Code.gs שבמאגר. אין מה למלא בו.',
+    'בחר למעלה את הפונקציה setup ולחץ ▶ הפעלה, ואשר את ההרשאות. היא יוצרת את התיקייה בדרייב ואת שני הקודים לבד, ומדפיסה ביומן את קוד הכתיבה.',
     'פרוס: "פריסה חדשה" · סוג "אפליקציית אינטרנט" · הרצה בשמי · גישה לכל מי שיש לו הקישור.',
-    'העתק את הכתובת שמסתיימת ב-‎/exec והדבק אותה כאן.'
+    'העתק את הכתובת שמסתיימת ב-‎/exec, והדבק אותה כאן יחד עם קוד הכתיבה.'
   ].forEach(text => {
     const li = document.createElement('li');
     li.textContent = text;

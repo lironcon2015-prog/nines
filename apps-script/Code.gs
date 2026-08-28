@@ -6,35 +6,97 @@
  * ואין מסד נתונים: קובץ JSON אחד ותיקיית תמונות.
  *
  * שני קודים ולא אחד:
- *   WRITE_CODE — יושב על הטלפון שלך. מוסיף, עורך ומוחק.
- *   READ_CODE  — מה שנשלח לילד. רואה ומנגן, ולא יותר.
+ *   קוד הכתיבה — יושב על הטלפון שלך. מוסיף, עורך ומוחק.
+ *   קוד הקריאה — נשלח לילד בתוך הקישור. רואה ומנגן, ולא יותר.
  * ההפרדה נאכפת כאן, בשרת, ולא רק במסכים של האפליקציה.
  *
+ * שניהם נוצרים לבד בהרצה הראשונה, יחד עם התיקייה, ונשמרים במאפייני
+ * הסקריפט. אין מה למלא כאן ואין מה להמציא — קוד אקראי של עשרים תווים
+ * חזק מכל דבר שאדם בוחר, ואי אפשר לשכוח להחליף אותו.
+ *
  * ================= הקמה, פעם אחת =================
- *  1. פתח תיקייה חדשה בדרייב בשם "תשיעיות". מזהה התיקייה הוא מה שמופיע
- *     בכתובת אחרי folders/ — למשל drive.google.com/drive/folders/1AbC…
- *  2. script.google.com → פרויקט חדש → הדבק את כל הקובץ הזה.
- *  3. מלא כאן למטה: FOLDER_ID, WRITE_CODE, READ_CODE, LIBRARY_NAME.
- *     שני הקודים צריכים להיות ארוכים ולא ניחושים — מי שמחזיק בקוד נכנס.
- *  4. פריסה → פריסה חדשה → סוג: אפליקציית אינטרנט.
+ *  1. script.google.com → פרויקט חדש → הדבק את כל הקובץ הזה.
+ *  2. בחר למעלה את הפונקציה setup ולחץ ▶ הפעלה. אשר את ההרשאות.
+ *     ביומן (למטה) יופיעו התיקייה שנוצרה וקוד הכתיבה שלך.
+ *  3. פריסה → פריסה חדשה → סוג: אפליקציית אינטרנט.
  *     "הרצה בשם": אני.   "מי יש לו גישה": כל מי שיש לו הקישור.
- *  5. אשר את ההרשאות (זה החשבון שלך מול הסקריפט שלך, פעם אחת).
- *  6. העתק את הכתובת שמסתיימת ב-/exec והדבק אותה באפליקציה,
- *     במסך "ספרייה משותפת".
+ *  4. העתק את הכתובת שמסתיימת ב-/exec, והדבק אותה באפליקציה יחד עם
+ *     קוד הכתיבה — מסך הבית → "ספרייה משותפת".
  *
  * ================= עדכון בהמשך =================
  * ערוך את הפריסה הקיימת (פריסה → נהל פריסות → עיפרון → גרסה: חדשה).
  * אל תיצור פריסה חדשה — היא מקבלת כתובת אחרת, ושני הטלפונים מאבדים את
- * הספרייה.
+ * הספרייה. הקודים והתיקייה נשמרים בין עדכונים.
  */
 
-var FOLDER_ID    = 'הדבק-כאן-את-מזהה-התיקייה';
-var WRITE_CODE   = 'החלף-אותי-בקוד-כתיבה-ארוך';
-var READ_CODE    = 'החלף-אותי-בקוד-קריאה-ארוך';
+/* השם שמוצג בפס העליון בשני הטלפונים. היחיד שאפשר לשנות כאן, ואפשר גם
+   פשוט להשאיר. */
 var LIBRARY_NAME = 'הספרייה שלנו';
 
+var FOLDER_NAME = 'תשיעיות';
 var DOC_NAME = 'library.json';
 var POSTER_DIR = 'posters';
+
+/* ===================== הקמה =====================
+   הרץ פעם אחת מהעורך. אפשר להריץ שוב בכל רגע — היא אינה יוצרת שוב מה
+   שכבר קיים, והיא הדרך לראות שוב את קוד הכתיבה אם שכחת אותו. */
+
+function setup() {
+  var codes = codes_();
+  var dir = folder();
+  var lines = [
+    '',
+    '  ✓ הכול מוכן.',
+    '',
+    '  התיקייה נוצרה בדרייב שלך:',
+    '     ' + dir.getName() + '  —  ' + dir.getUrl(),
+    '',
+    '  ┌─────────────────────────────────────────────',
+    '  │ קוד הכתיבה — זה מה שמדביקים באפליקציה שלך:',
+    '  │',
+    '  │    ' + codes.write,
+    '  │',
+    '  │ אל תשלח אותו לאף אחד.',
+    '  └─────────────────────────────────────────────',
+    '',
+    '  קוד הקריאה נוצר גם הוא, והאפליקציה שותלת אותו לבד בתוך הקישור',
+    '  שנשלח לילד. אין צורך להעתיק אותו.',
+    '',
+    '  עכשיו: פריסה → פריסה חדשה → אפליקציית אינטרנט,',
+    '  "הרצה בשם: אני" ו-"גישה: כל מי שיש לו הקישור".',
+    '  ואז הדבק באפליקציה את הכתובת שמסתיימת ב-/exec ואת קוד הכתיבה.',
+    ''
+  ].join('\n');
+  Logger.log(lines);
+  return lines;
+}
+
+/* אם קוד דלף — הרץ את זה, והרץ אחר כך setup כדי לראות את החדש. הילד
+   יצטרך קישור הצטרפות חדש; הספרייה עצמה אינה נוגעת. */
+function resetCodes() {
+  props().deleteProperty('writeCode');
+  props().deleteProperty('readCode');
+  return setup();
+}
+
+function props() {
+  return PropertiesService.getScriptProperties();
+}
+
+/* הקודים נוצרים פעם אחת ונשמרים. עשרים תווים אקראיים — מי שמחזיק בקוד
+   נכנס, ולכן הוא לא צריך להיות משהו שאדם בחר. */
+function codes_() {
+  var p = props();
+  var write = p.getProperty('writeCode');
+  var read = p.getProperty('readCode');
+  if (!write) { write = 'w-' + token_(); p.setProperty('writeCode', write); }
+  if (!read) { read = 'r-' + token_(); p.setProperty('readCode', read); }
+  return { write: write, read: read };
+}
+
+function token_() {
+  return (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '').slice(0, 20);
+}
 
 /* ===================== נקודת הכניסה ===================== */
 
@@ -83,9 +145,10 @@ function out(payload) {
 
 function roleOf(code) {
   var given = String(code || '');
+  var mine = codes_();
   /* השוואה באורך קבוע, כדי שזמן התשובה לא יסגיר כמה תווים התאימו */
-  if (equals(given, WRITE_CODE)) return 'owner';
-  if (equals(given, READ_CODE)) return 'viewer';
+  if (equals(given, mine.write)) return 'owner';
+  if (equals(given, mine.read)) return 'viewer';
   return null;
 }
 
@@ -100,14 +163,35 @@ function ping(role) {
   var answer = { ok: true, mode: role, name: LIBRARY_NAME };
   /* קוד הקריאה מוחזר רק לבעלים — זה מה שהוא שולח הלאה, והצופה לא צריך
      אותו ולא מקבל אותו */
-  if (role === 'owner') answer.readCode = READ_CODE;
+  if (role === 'owner') answer.readCode = codes_().read;
   return answer;
 }
 
 /* ===================== המסמך ===================== */
 
+/* התיקייה נוצרת לבד בפעם הראשונה, ומזהה שלה נשמר. אין מה ליצור ביד
+   ואין מזהה להעתיק. אם מחקת אותה בטעות — תיווצר חדשה. */
 function folder() {
-  return DriveApp.getFolderById(FOLDER_ID);
+  var p = props();
+  var id = p.getProperty('folderId');
+  if (id) {
+    try { return DriveApp.getFolderById(id); } catch (err) { /* נמחקה */ }
+  }
+  /* נעילה, כי שתי בקשות שמגיעות יחד בפעם הראשונה היו יוצרות שתי
+     תיקיות, ואחת מהן הייתה נשארת יתומה */
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    id = p.getProperty('folderId');
+    if (id) {
+      try { return DriveApp.getFolderById(id); } catch (err) { /* נמחקה */ }
+    }
+    var made = DriveApp.createFolder(FOLDER_NAME);
+    p.setProperty('folderId', made.getId());
+    return made;
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function docFile() {
@@ -136,6 +220,11 @@ function writeDoc(doc) {
 function put(role, incoming) {
   if (role !== 'owner') return { ok: false, error: 'הקוד הזה הוא לצפייה בלבד' };
   if (!incoming || !incoming.videos) return { ok: false, error: 'לא הגיע מסמך' };
+
+  /* התיקייה נוצרת לפני הנעילה ולא בתוכה: היצירה נועלת בעצמה, ונעילה
+     בתוך נעילה על אותו מנעול הייתה תוקעת את הכתיבה הראשונה עד שייגמר
+     פסק הזמן. אחרי הקריאה הזאת היא כבר קיימת, ו-readDoc לא ינעל. */
+  folder();
 
   /* נעילה, כי שני טלפונים יכולים לדחוף באותה שנייה. בלי זה, מי שכתב
      שני יקרא מסמך שקדם לכתיבה של הראשון וידרוס אותה. */
