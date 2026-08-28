@@ -95,8 +95,23 @@ async function call(op, payload, target) {
   const at = target || conf;
   if (!at || !at.url || !at.code) throw new Error('הספרייה המשותפת אינה מוגדרת');
   const body = Object.assign({ op, k: at.code }, payload || {});
-  const res = await withTimeout(at.url, { method: 'POST', headers: PLAIN, body: JSON.stringify(body) });
-  if (!res.ok) throw new Error('השרת ענה ' + res.status);
+  let res;
+  try {
+    res = await withTimeout(at.url, { method: 'POST', headers: PLAIN, body: JSON.stringify(body) });
+  } catch (e) {
+    /* "Failed to fetch" באנגלית אינו אומר למשתמש כלום, והוא גם מכסה שני
+       מצבים שונים לגמרי: אין רשת, או שהפריסה אינה פתוחה לכל מי שיש לו
+       הקישור ולכן גוגל חוסמת את הבקשה עוד לפני שהיא מגיעה לסקריפט. */
+    if (e && e.name === 'AbortError') {
+      throw new Error('הסקריפט לא ענה בתוך ' + (TIMEOUT / 1000) + ' שניות. נסה שוב — פנייה ראשונה אחרי הפסקה איטית.');
+    }
+    throw new Error('לא הצלחנו להגיע לסקריפט. בדוק שיש רשת, ושבפריסה '
+      + '"מי יש לו גישה" מוגדר ל"כל מי שיש לו הקישור".');
+  }
+  if (!res.ok) throw new Error('השרת ענה ' + res.status
+    + (res.status === 401 || res.status === 403
+      ? ' — הפריסה אינה פתוחה לכל מי שיש לו הקישור, או ש"הרצה בשם" אינו מוגדר אליך.'
+      : ''));
   let json;
   try {
     json = JSON.parse(await res.text());
@@ -109,16 +124,70 @@ async function call(op, payload, target) {
   return json;
 }
 
+/* מחלצים ולא בודקים.
+
+   הגרסה הקודמת בדקה את הכתובת מול ביטוי מעוגן משני צדדיה, ואז כל תו
+   מיותר — נראה או לא — הפיל אותה כולה. זה נכשל שוב ושוב על כתובת שהייתה
+   תקינה לגמרי, וההודעה אמרה "הכתובת שגויה" כשהיא לא הייתה.
+
+   כאן מחפשים את הכתובת **בתוך** מה שהודבק. מה שנמצא הוא בהגדרה נקי:
+   הצורה של כתובת פריסה ידועה במדויק, והמזהה הוא base64url בלבד. רווח
+   בהתחלה, שורה חדשה באמצע, מרכאות, סימן כיווניות או טקסט שנדבק מסביב —
+   כולם פשוט אינם חלק מההתאמה, ואין צורך לחזות כל אחד מהם מראש.
+
+   זה גם מחמיר יותר ולא פחות: קודם התקבלה כל כתובת ב-script.google.com
+   שהסתיימה ב-exec, ועכשיו רק כתובת פריסה בצורתה המדויקת. הקוד שלך אינו
+   נשלח לשום מקום אחר. */
+const EXEC = /https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec/;
+
+/* כל רווח נמחק לפני החיפוש, ולא רק בקצוות: העתקה של כתובת ארוכה מתוך
+   טקסט גולש שוברת אותה לשתי שורות, והשורה החדשה נוחתת באמצע המזהה.
+   כתובת אינה מכילה רווח לעולם, ולכן זה בטוח — והביטוי אינו מעוגן
+   בהתחלה, כך שגם טקסט שנדבק מסביב אינו מפריע. */
+const SPACE = /\s+/g;
+
+/** כתובת הפריסה מתוך מה שהודבק, או null */
+export function findExec(raw) {
+  const hit = tidy(raw).replace(SPACE, '').match(EXEC);
+  return hit ? hit[0] : null;
+}
+
+/* קוד אינו מכיל רווח — הוא נוצר בסקריפט כ-w- או r- ועשרים תווי base64url.
+   אותה מלכודת של שורה שנשברה, ואותו פתרון. */
+function tidyCode(raw) {
+  return tidy(raw).replace(SPACE, '');
+}
+
+/* תו שאי אפשר לראות הוא בדיוק מה שמפיל בדיקה כזאת, ולכן הוא חייב להופיע
+   בדיווח. כל מה שאינו ASCII נראה מוחלף בקוד שלו. */
+function reveal(text) {
+  return String(text).replace(/[^\x20-\x7E]/g, c => '⟨' + c.codePointAt(0).toString(16).toUpperCase() + '⟩');
+}
+
+/* הודעה שאפשר לפעול לפיה: מה בדיוק לא נמצא, וכל מה שהיה בשדה — בשלמותו
+   ובלי חיתוך. חיתוך ב-60 תווים הסתיר בדיוק את הזנב שבו הבעיה. */
+function explain(raw) {
+  const clean = tidy(raw);
+  if (!clean) return { message: 'לא הודבקה כתובת.', detail: '' };
+  const message = clean.indexOf('script.google.com') >= 0
+    ? 'זו כתובת של Apps Script, אבל לא כתובת פריסה. היא צריכה להיראות כך: '
+      + 'script.google.com/macros/s/<מזהה>/exec — ולא /dev ולא כתובת של העורך.'
+    : 'לא מצאתי בשדה כתובת פריסה של Apps Script.';
+  /* הערך הגולמי ולא המנוקה. מה שהניקוי הסיר אינו הסיבה לכישלון, ואם
+     נציג את המנוקה נסתיר שוב בדיוק את מה שצריך לראות. */
+  return { message, detail: reveal(String(raw || '').slice(0, 400)) };
+}
+
 /** בדיקת כתובת וקוד. מחזירה {mode,name} — מי שהקוד הזה הופך אותך להיות. */
 export async function ping(url, code) {
-  const clean = tidy(url);
-  if (!/^https:\/\/script\.google\.com\/.*\/exec$/.test(clean)) {
-    /* הכתובת שהתקבלה באמת, ולא רק "לא תקינה": כשהשדה נראה נכון והבדיקה
-       בכל זאת נכשלת, זו הדרך היחידה לראות מה בעצם יושב בו. */
-    throw new Error('הכתובת צריכה להתחיל ב-https://script.google.com ולהסתיים ב-/exec. '
-      + 'מה שהתקבל: ' + (clean.slice(0, 60) || '(ריק)'));
+  const clean = findExec(url);
+  if (!clean) {
+    const why = explain(url);
+    const err = new Error(why.message);
+    err.detail = why.detail;
+    throw err;
   }
-  const at = { url: clean, code: tidy(code) };
+  const at = { url: clean, code: tidyCode(code) };
   const out = await call('ping', null, at);
   /* קוד הקריאה מוחזר רק לבעלים — זה מה שהוא שולח הלאה, והצופה אינו
      צריך אותו ואינו מקבל אותו. */

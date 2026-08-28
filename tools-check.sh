@@ -26,5 +26,12 @@ for f in js/*.js; do
   grep -q "'\./$f'" sw.js || { echo "✗ $f אינו ב-ASSETS שב-sw.js"; fail=1; }
 done
 
+# בדיקות היחידה שנשברו בפועל
+if command -v node >/dev/null; then
+  node tools-test.mjs || fail=1
+else
+  echo "· node אינו מותקן, בדיקות היחידה לא רצו"
+fi
+
 [ $fail -eq 0 ] && echo "✓ מוכן לפרסום"
 exit $fail
