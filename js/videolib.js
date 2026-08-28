@@ -714,7 +714,15 @@ async function savePoster(id, src, log) {
   const blob = await fetchPoster(src, log);
   const small = blob ? await posters.shrink(blob) : null;
   if (small && await posters.put(id, small)) {
-    if (!readOnly()) updateVideo(id, { posterKind: 'blob', posterUrl: src });
+    /* הטלפון הצליח במקום שהסקריפט נכשל — וזה קורה, כי אינסטגרם חוסמת
+       שרתים ולא דפדפנים. התמונה חייבת לעלות לתיקייה כאן ועכשיו: בלי זה
+       היא נשארת על המכשיר הזה בלבד, הצד השני רואה כרטיס ריק, ואין שום
+       סימן לכך שמשהו חסר. */
+    let ref = null;
+    if (cloud.isOn() && !cloud.isViewer()) {
+      try { ref = await cloud.putPoster(id, small); } catch (e) { /* תעלה בהשלמה הבאה */ }
+    }
+    if (!readOnly()) updateVideo(id, { posterKind: 'blob', posterUrl: src, posterRef: ref || undefined });
     return true;
   }
   /* גם כשלא הצלחנו לשמור — הכתובת נשמרת, כי היא עדיין שווה ניסיון הצגה
@@ -747,20 +755,11 @@ async function backfillPosters(repaint) {
       for (const v of needsDownload(saved).slice(0, DOWNLOAD)) {
         try {
           const blob = await cloud.getPoster(v.posterRef);
-          if (blob && await posters.put(v.id, blob)) { changed = true; saved.add(v.id); }
-        } catch (e) { break; }   /* הסקריפט לא עונה — אין טעם להמשיך */
-      }
-    }
-
-    /* ואחר כך ההפך: תמונות ששמורות כאן ועוד לא עלו לתיקייה. אלה הן כל
-       הסרטונים שהיו בספרייה לפני החיבור — בלי המעבר הזה הרשימה הייתה
-       מגיעה לצד השני בלי התמונות שלה. */
-    if (cloud.isOn() && !cloud.isViewer()) {
-      for (const v of needsUpload(saved).slice(0, UPLOAD)) {
-        try {
-          const blob = await posters.blob(v.id);
-          const ref = blob ? await cloud.putPoster(v.id, blob) : null;
-          if (ref) { updateVideo(v.id, { posterRef: ref }); changed = true; }
+          /* מה שהסקריפט משך מאינסטגרם הוא בגודל המקורי. מקטינים גם כאן,
+             אחרת המכשיר הצופה אוגר תמונות גדולות פי כמה מאלה שהוא צריך.
+             אם ההקטנה נכשלת עדיף התמונה המלאה על כלום. */
+          const small = blob ? (await posters.shrink(blob)) || blob : null;
+          if (small && await posters.put(v.id, small)) { changed = true; saved.add(v.id); }
         } catch (e) { break; }   /* הסקריפט לא עונה — אין טעם להמשיך */
       }
     }
@@ -771,6 +770,20 @@ async function backfillPosters(repaint) {
         const known = v.posterUrl || thumbUrl(v.full || v.url);
         const src = known || (await lookup(v.url)).image;
         if (await savePoster(v.id, src, null)) { changed = true; saved.add(v.id); }
+      }
+    }
+
+    /* ההעלאה **אחרונה**, וזו לא קוסמטיקה: כשהיא רצה ראשונה, כל תמונה
+       שהובאה בסבב הזה נשארת בלי posterRef עד הפתיחה הבאה של הספרייה —
+       והצד השני רואה בינתיים כרטיס ריק בלי סיבה נראית. כאן נכנס גם מה
+       שהיה בספרייה לפני החיבור, וגם מה שהתקבל לפני שנייה. */
+    if (cloud.isOn() && !cloud.isViewer()) {
+      for (const v of needsUpload(saved).slice(0, UPLOAD)) {
+        try {
+          const blob = await posters.blob(v.id);
+          const ref = blob ? await cloud.putPoster(v.id, blob) : null;
+          if (ref) { updateVideo(v.id, { posterRef: ref }); changed = true; }
+        } catch (e) { break; }   /* הסקריפט לא עונה — אין טעם להמשיך */
       }
     }
 
