@@ -12,8 +12,13 @@ app=$(grep -o '"version": "[^"]*"' content/booklets.json | head -1 | cut -d'"' -
 echo "sw.js       $sw"
 echo "booklets    $app"
 
-# מול מה שכבר פורסם
-if git rev-parse --verify -q origin/main >/dev/null; then
+# מול מה שכבר פורסם — אבל רק אם באמת השתנה משהו שמוגש לטלפון.
+# שינוי בתיעוד או בכללי העבודה אינו דורש העלאת גרסה, וגייט שצועק לשווא
+# הוא גייט שמתרגלים להתעלם ממנו.
+touched=$(git diff --name-only origin/main -- index.html sw.js css js content editor.html manifest.webmanifest 2>/dev/null)
+if [ -z "$touched" ]; then
+  echo "· לא השתנה קוד או תוכן — אין צורך בהעלאת גרסה"
+elif git rev-parse --verify -q origin/main >/dev/null; then
   psw=$(git show origin/main:sw.js 2>/dev/null | grep -o "const VERSION = 'v[0-9]*'" | grep -o "v[0-9]*")
   papp=$(git show origin/main:content/booklets.json 2>/dev/null | grep -o '"version": "[^"]*"' | head -1 | cut -d'"' -f4)
   echo "פורסם       sw $psw · גרסה $papp"
