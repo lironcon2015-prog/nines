@@ -8,7 +8,7 @@ import { mountVideos } from './videolib.js';
 import { mountShare } from './sharelib.js';
 import { migrate } from './videos.js';
 import * as cloud from './cloud.js';
-import { migrateLegacy, dailyPicks } from './store.js';
+import { migrateLegacy, dailyPicks, setMirrored, hasSide } from './store.js';
 
 const $ = id => document.getElementById(id);
 
@@ -75,6 +75,11 @@ async function boot() {
   /* אם מסיבה כלשהי הגיע קובץ אינדקס מגרסה ישנה, עדיף ספרייה עם טקסט חסר
      מאשר מסך ריק — הכרטיסים עצמם נקראים מקבצי החוברות */
   const home = index.home || { eyebrow: '', title: 'החוברות', lede: '', foot: '' };
+
+  /* בנייה לתפקיד אחד (tools-single.mjs) יכולה לקבוע צד. נקבע פעם אחת
+     בלבד, כדי שהמתג שבתוך החוברת יישאר של הילד ולא ייבלע בכל טעינה. */
+  if (index.defaultSide && !hasSide()) setMirrored(index.defaultSide === 'L');
+
   let current = null;   // מסך החוברת הפעיל
 
   function openBooklet(id, scenarioId) {
