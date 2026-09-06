@@ -321,9 +321,15 @@ h2 .term{color:inherit;border-bottom-width:2px}
 .roletrack i.on{background:var(--pink)}
 .rolego{font-family:'Heebo',sans-serif;font-weight:700;font-size:19px;color:var(--ink-soft);line-height:1}
 
-.traingo{width:100%;margin-top:14px;font-family:'Heebo',sans-serif;font-weight:700;font-size:14px;
-  padding:14px;border:1px solid var(--ink);background:var(--ink);color:var(--paper);cursor:pointer}
-.traingo:active{opacity:.82}
+/* שלוש פעולות בסולם אחד: הלמידה על כל התרחישים מלאה וכהה, האימון הקצר
+   מסומן אך לא מלא, והמבדק הוא הקל מכולם. */
+.learngo{width:100%;margin-top:14px;font-family:'Heebo',sans-serif;font-weight:700;font-size:15px;
+  padding:15px;border:1px solid var(--ink);background:var(--ink);color:var(--paper);cursor:pointer}
+.learngo:active{opacity:.82}
+.learngo:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.traingo{width:100%;margin-top:8px;font-family:'Heebo',sans-serif;font-weight:700;font-size:13.5px;
+  padding:12px;border:1.5px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer}
+.traingo:active{background:var(--ink);color:var(--paper)}
 .traingo:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .quizgo{width:100%;margin-top:8px;font-family:'Heebo',sans-serif;font-weight:700;font-size:12.5px;
   padding:11px;border:1px solid var(--hair);background:transparent;color:var(--ink);cursor:pointer}
