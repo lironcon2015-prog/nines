@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#E8E2D4"/>
+  <g transform="translate(256,256) scale(1) translate(-256,-256)" style="isolation:isolate">
+    <g style="mix-blend-mode:multiply">
+    <g stroke="#E5326F" fill="none" stroke-linecap="round">
+      <circle cx="250" cy="250" r="138" stroke-width="34"/>
+      <line x1="64" y1="250" x2="436" y2="250" stroke-width="22"/>
+    </g></g>
+    <g style="mix-blend-mode:multiply" transform="translate(12,12)">
+    <g stroke="#1F4FA8" fill="none" stroke-linecap="round">
+      <circle cx="250" cy="250" r="138" stroke-width="34"/>
+      <line x1="64" y1="250" x2="436" y2="250" stroke-width="22"/>
+    </g></g>
+  </g>
+</svg>
