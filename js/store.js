@@ -143,6 +143,13 @@ export function setMirrored(on) {
   try { localStorage.setItem(SIDE_KEY, on ? 'L' : 'R'); } catch (e) { /* לא קריטי */ }
 }
 
+/* האם הצד כבר נבחר על המכשיר. בנייה לתפקיד אחד יכולה להגיע עם צד מוכן
+   (defaultSide), אבל רק כברירת מחדל בפתיחה הראשונה — אחרי שהילד נגע
+   במתג, הבחירה שלו גוברת ואסור לדרוס אותה בכל טעינה. */
+export function hasSide() {
+  try { return localStorage.getItem(SIDE_KEY) !== null; } catch (e) { return false; }
+}
+
 /* --- מספר החולצה של הילד ---
    משמש לסידור הספרייה: החוברת של התפקיד שלו עולה ראשונה ומסומנת.
    אינו קובע את צביעת הדיאגרמות — את השחקן המודגש קובעת החוברת, כי

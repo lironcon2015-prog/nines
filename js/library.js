@@ -37,17 +37,22 @@ export function renderLibrary(home, booklets, formations, onOpen, onQuiz, onTrai
   };
 
   const me = getMyNumber();
+
+  /* בנייה לתפקיד אחד: אין ספרייה ואין מה לבחור. בלי ההבחנה הזאת מסך
+     הבית היה פותח ב"איזה מספר אתה?" ומציג את כל מספרי המערך — רובם בלי
+     חוברת — כדי לבחור בין אפשרות אחת. */
+  const single = booklets.length === 1;
+
   /* בשיקוף ההשוואה היא מול התפקיד המשוקף, כך שילד שמאלי שהוא מספר 2
      מקבל את חוברת המגן שהופכת עבורו ל-2. */
-  const mine = hasMyNumber() && me > 0
-    ? booklets.find(b => heroOf(b) === me) || null
-    : null;
+  const mine = single ? booklets[0]
+    : (hasMyNumber() && me > 0 ? booklets.find(b => heroOf(b) === me) || null : null);
 
-  const ctx = { booklets, formations, mirrored, heroOf, me, onOpen, onQuiz, onTrain, repaint };
+  const ctx = { booklets, formations, mirrored, heroOf, me, onOpen, onQuiz, onTrain, repaint, single };
 
   renderMeLine(ctx);
   const rest = renderHero(ctx, mine);
-  renderRoles(ctx, rest, !hasMyNumber() || !mine);
+  renderRoles(ctx, rest, !single && (!hasMyNumber() || !mine));
   renderVideos();
 }
 
@@ -55,10 +60,10 @@ export function renderLibrary(home, booklets, formations, onOpen, onQuiz, onTrai
    אחרי שנבחר מספר זו שורה אחת ולא כרטיס: השאלה כבר נענתה, והמקום שייך
    לתפקיד עצמו. לפני שנבחר — אין כאן כלום, כי הבוחר הוא הגיבור. */
 
-function renderMeLine({ me, repaint }) {
+function renderMeLine({ me, repaint, single }) {
   const box = $('me');
   box.textContent = '';
-  if (!hasMyNumber()) { box.hidden = true; return; }
+  if (single || !hasMyNumber()) { box.hidden = true; return; }
   box.hidden = false;
   box.className = 'me set';
 
@@ -83,6 +88,10 @@ function renderHero(ctx, mine) {
   const box = $('hero');
   box.textContent = '';
 
+  if (ctx.single) {
+    box.appendChild(bigCard(mine, ctx));
+    return [];
+  }
   if (!hasMyNumber()) {
     drawChooser(box, ctx);
     return ctx.booklets;
