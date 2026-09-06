@@ -28,6 +28,23 @@
 
     <div class="me" id="me" hidden></div>
 
+    <!-- החבילה המלאה. מסך הטעינה כשאין תוכן במכשיר, ושורת החלפה כשיש. -->
+    <div class="pack" id="pack" hidden>
+      <p class="pack-t" id="pack-t"></p>
+      <p class="pack-d" id="pack-d"></p>
+      <div class="pack-do" id="pack-do">
+        <label class="pack-file" for="pack-input" id="pack-filelbl">בחר קובץ חבילה</label>
+        <input type="file" id="pack-input" accept=".json,application/json">
+        <button type="button" id="pack-urlgo">או מכתובת</button>
+      </div>
+      <form class="pack-url" id="pack-urlrow" hidden novalidate>
+        <input type="url" id="pack-url" inputmode="url" autocomplete="off" placeholder="https://…/pack/all.json">
+        <button type="submit" id="pack-load">טען</button>
+      </form>
+      <p class="verror" id="pack-error" hidden></p>
+      <button type="button" class="pack-drop" id="pack-drop" hidden>הסר את החבילה מהמכשיר</button>
+    </div>
+
     <button id="install" type="button">התקן את האפליקציה על המסך</button>
 
     <!-- התפקיד שנבחר: כרטיס אחד גדול. או הבוחר, כשעוד לא נבחר מספר. -->

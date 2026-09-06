@@ -31,6 +31,14 @@ for f in js/*.js; do
   grep -q "'\./$f'" sw.js || { echo "✗ $f אינו ב-ASSETS שב-sw.js"; fail=1; }
 done
 
+# החבילה והגרסאות לתפקיד נבנות מהתוכן ומהקוד, ולכן הן מתיישנות בשקט:
+# שינוי קוד שלא נבנה מחדש מתפרסם רק בשורש, והטלפון של מי שקיבל קישור
+# לתפקיד ממשיך להגיש את הקוד הישן.
+if command -v node >/dev/null; then
+  node tools-pack.mjs --check || fail=1
+  node tools-single.mjs --check || fail=1
+fi
+
 # בדיקות היחידה שנשברו בפועל
 if command -v node >/dev/null; then
   node tools-test.mjs || fail=1

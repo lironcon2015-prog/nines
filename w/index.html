@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl" class="loading">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="app-scope" content="w">
+<title>הכנף — תשיעיות</title>
+<meta name="description" content="הכנף בכדורגל תשיעיות: מיקומים, תנועות, החלטות עם הכדור וטעויות נפוצות.">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#E8E2D4">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="תשיעיות">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32">
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="wrap">
+
+  <div class="state" id="state">טוען…</div>
+
+  <!-- ===== מסך הבית ===== -->
+  <section id="library" hidden>
+    <div class="eyebrow" id="lib-eyebrow"></div>
+    <h1 id="lib-title"></h1>
+    <p class="lede" id="lib-lede"></p>
+
+    <div class="me" id="me" hidden></div>
+
+    <!-- החבילה המלאה. מסך הטעינה כשאין תוכן במכשיר, ושורת החלפה כשיש. -->
+    <div class="pack" id="pack" hidden>
+      <p class="pack-t" id="pack-t"></p>
+      <p class="pack-d" id="pack-d"></p>
+      <div class="pack-do" id="pack-do">
+        <label class="pack-file" for="pack-input" id="pack-filelbl">בחר קובץ חבילה</label>
+        <input type="file" id="pack-input" accept=".json,application/json">
+        <button type="button" id="pack-urlgo">או מכתובת</button>
+      </div>
+      <form class="pack-url" id="pack-urlrow" hidden novalidate>
+        <input type="url" id="pack-url" inputmode="url" autocomplete="off" placeholder="https://…/pack/all.json">
+        <button type="submit" id="pack-load">טען</button>
+      </form>
+      <p class="verror" id="pack-error" hidden></p>
+      <button type="button" class="pack-drop" id="pack-drop" hidden>הסר את החבילה מהמכשיר</button>
+    </div>
+
+    <button id="install" type="button">התקן את האפליקציה על המסך</button>
+
+    <!-- התפקיד שנבחר: כרטיס אחד גדול. או הבוחר, כשעוד לא נבחר מספר. -->
+    <div id="hero"></div>
+
+    <!-- וכל השאר, מקופל -->
+    <details class="roles" id="roles" hidden>
+      <summary id="roles-sum">ספריית התפקידים</summary>
+      <div class="rolelist" id="rolelist"></div>
+    </details>
+
+    <button id="videosgo" type="button">ספריית הסרטונים<span id="videosn"></span><span class="videostag" id="videostag" hidden></span></button>
+    <button id="sharego" type="button">ספרייה משותפת</button>
+
+    <p class="foot"><span id="lib-foot"></span><span class="ver" id="lib-ver"></span></p>
+  </section>
+
+  <!-- ===== מסך חוברת ===== -->
+  <section id="booklet" hidden>
+    <a class="back" href="#/" id="back">חזרה ←</a>
+
+    <div class="eyebrow" id="eyebrow"></div>
+
+    <div class="head">
+      <div class="mark" aria-hidden="true"><span class="b" id="mark-b"></span><span class="p" id="mark-p"></span></div>
+      <div>
+        <h1 id="b-title"></h1>
+        <p class="lede" id="b-lede"></p>
+      </div>
+    </div>
+
+    <div class="track" id="track" aria-hidden="true"></div>
+    <div class="count" id="count"></div>
+
+    <div class="formation" id="formation">
+      <b id="f-label"></b>
+    </div>
+
+    <div class="side" id="side">
+      <span id="side-label"></span>
+      <button type="button" data-foot="R" aria-pressed="true">ימין</button>
+      <button type="button" data-foot="L" aria-pressed="false">שמאל</button>
+      <em id="side-hint"></em>
+    </div>
+
+    <div class="rail"><div class="chips" id="chips" role="tablist"></div></div>
+
+    <div class="board" id="board">
+      <div class="legend">
+        <span><i class="sw" style="background:#1F4FA8"></i>הקבוצה שלנו</span>
+        <span><i class="sw" style="background:#E5326F"></i><span id="lg-role"></span></span>
+        <span><i class="sw" style="border:1.6px solid #6E7A6B"></i>יריב</span>
+        <span><i class="sw" style="background:linear-gradient(90deg,#E5326F 60%,transparent 0)"></i>ריצה</span>
+        <span><i class="sw" style="background:repeating-linear-gradient(90deg,#1F4FA8 0 5px,transparent 5px 9px)"></i>מסירה</span>
+        <span><i class="sw" style="border:1.4px dashed #E5326F"></i>נקודת התחלה</span>
+      </div>
+    </div>
+    <div class="playrow"><button class="play" id="play" type="button">הראה לי את התנועה</button></div>
+    <div class="hint" id="hint">החלק ימינה ושמאלה כדי לעבור בין התרחישים</div>
+
+    <div class="panel" id="panel">
+      <div class="phase" id="p-phase"></div>
+      <h2 id="p-title"></h2>
+      <p class="sub" id="p-sub"></p>
+
+      <!-- המשפט הוא מה שנשאר בראש אחרי שבוע, ולכן הוא קודם לפירוט -->
+      <div class="cue"><small>מה צועקים מהקו</small><span id="p-cue"></span></div>
+
+      <ul id="p-does"></ul>
+      <details class="mistake"><summary>טעות נפוצה</summary><span id="p-mistake"></span></details>
+
+      <button class="learn" id="learn" type="button" aria-pressed="false"><span id="learn-txt">סמן שלמדתי את זה</span></button>
+      <div class="nav">
+        <button id="prev" type="button">הקודם</button>
+        <button id="next" type="button">התרחיש הבא</button>
+      </div>
+    </div>
+
+    <p class="foot" id="closing">
+      <button class="reset" id="reset" type="button">אפס את הסימונים</button>
+    </p>
+  </section>
+
+  <!-- ===== מסך מבדק ===== -->
+  <section id="quiz" hidden>
+    <a class="back" href="#/" id="q-back">חזרה ←</a>
+    <div class="eyebrow" id="q-eyebrow"></div>
+
+    <div class="track" id="q-track" aria-hidden="true"></div>
+    <div class="count" id="q-count"></div>
+
+    <div id="q-stage">
+      <div class="phase" id="q-context"></div>
+      <h2 id="q-ask"></h2>
+
+      <div class="board" id="q-board"></div>
+      <p class="hint" id="q-hint">גע במגרש במקום שבו אתה צריך להיות</p>
+
+      <div class="qfeed" id="q-feed" hidden></div>
+      <div class="qchoices" id="q-choices" hidden></div>
+
+      <div class="nav"><button id="q-confirm" type="button">זהו, זה המקום</button></div>
+    </div>
+
+    <div id="q-result" hidden></div>
+  </section>
+
+  <!-- ===== מסך ספריית הסרטונים ===== -->
+  <section id="videos" hidden>
+    <a class="back" href="#/" id="v-back">חזרה לחוברות ←</a>
+
+    <div class="eyebrow">סרטונים ששווה לראות שוב</div>
+    <h1>ספריית הסרטונים</h1>
+    <p class="lede" id="v-lede"></p>
+
+    <div class="vsync" id="v-sync" hidden></div>
+
+    <details class="vform" id="v-form">
+      <summary id="v-formtitle">הוסף סרטון</summary>
+      <form id="v-formel" novalidate>
+        <label for="v-url">הקישור לסרטון</label>
+        <div class="vurl">
+          <input type="url" id="v-url" inputmode="url" autocomplete="off"
+                 placeholder="https://www.instagram.com/reel/…">
+          <button type="button" id="v-paste">הדבק</button>
+        </div>
+
+        <label for="v-title">שם הסרטון <em>לא חובה</em></label>
+        <input type="text" id="v-title" autocomplete="off" placeholder="למשל: מסירה ראשונה מתחת ללחץ">
+
+        <label for="v-cat">כותרת</label>
+        <select id="v-cat"></select>
+        <input type="text" id="v-newcat" hidden autocomplete="off" placeholder="שם הכותרת החדשה">
+
+        <label for="v-note">מה לשים לב בו <em>לא חובה</em></label>
+        <textarea id="v-note" rows="2" placeholder="שורה אחת שתזכיר לך למה שמרת אותו"></textarea>
+
+        <label class="vauto" for="v-auto">
+          <input type="checkbox" id="v-auto" checked>
+          <span>הבא תמונה ושם אוטומטית<em>הקישור נשלח לשירות תצוגה מקדימה, שמחזיר את התמונה של הסרטון, את שמו, ואת הכתובת המלאה של קישור מקוצר. בלי זה — אין תמונות, וקישור מקוצר לא ינוגן כאן.</em></span>
+        </label>
+        <button type="button" class="vcheck" id="v-check">בדוק את השירותים</button>
+        <div class="vcheckout" id="v-checkout" hidden></div>
+
+        <p class="verror" id="v-error" hidden></p>
+        <div class="vsubmit">
+          <button type="submit" id="v-save">הוסף לספרייה</button>
+          <button type="button" id="v-cancel" hidden>בטל</button>
+        </div>
+      </form>
+    </details>
+
+    <div class="rail"><div class="chips" id="v-chips" role="tablist"></div></div>
+
+    <button class="vmanage" id="v-managego" type="button" aria-expanded="false">נהל כותרות</button>
+    <div class="cats" id="v-manage" hidden></div>
+
+    <div class="vlist" id="v-list"></div>
+
+    <p class="foot" id="v-foot"></p>
+  </section>
+
+  <!-- ===== מסך הספרייה המשותפת ===== -->
+  <section id="share" hidden>
+    <a class="back" href="#/" id="s-back">חזרה לחוברות ←</a>
+    <div class="eyebrow">דרייב · בלי חשבון ובלי סיסמה</div>
+    <h1 id="s-title">ספרייה משותפת</h1>
+    <div id="s-body"></div>
+  </section>
+
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
