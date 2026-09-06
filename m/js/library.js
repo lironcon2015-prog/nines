@@ -341,14 +341,26 @@ function bigCard(b, ctx, tagline) {
     }
   }
 
-  /* האימון הקצר הוא הפעולה הראשית: שלוש שאלות בערב אחרי אימון הן משהו
-     שילד באמת חוזר אליו, בניגוד למבדק על חוברת שלמה. */
+  /* הלמידה היא הפעולה הראשית, והיא על כל התרחישים. קודם היא הייתה
+     מוסתרת בשם התפקיד — כותרת שנראית כמו כותרת ומתנהגת ככפתור — וילד
+     שהגיע לכאן ראה רק "אימון · 3 תרחישים" ולא ידע איפה החומר עצמו. */
+  const learn = document.createElement('button');
+  learn.type = 'button';
+  learn.className = 'learngo';
+  learn.textContent = 'למד את כל התרחישים · ' + b.scenarios.length;
+  /* תמיד מהתחלה, ולא מאיפה שהפסיק: "כל התרחישים" חייב לפתוח את הראשון,
+     ואת ההמשך יש שורת "המשך" מעליו. */
+  learn.onclick = () => onOpen(b.id);
+  card.appendChild(learn);
+
+  /* האימון הקצר אחריה: שלוש שאלות בערב אחרי אימון הן משהו שילד באמת
+     חוזר אליו, בניגוד למבדק על חוברת שלמה. */
   const train = document.createElement('button');
   train.type = 'button';
   train.className = 'traingo';
   train.textContent = quizTouched(b.id)
     ? 'האימון של היום · 3 תרחישים'
-    : 'התחל אימון · 3 תרחישים';
+    : 'אימון קצר · 3 תרחישים';
   train.onclick = () => onTrain(b.id);
   card.appendChild(train);
 
