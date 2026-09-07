@@ -9,7 +9,7 @@ import { mountShare } from './sharelib.js';
 import { migrate } from './videos.js';
 import * as cloud from './cloud.js';
 import { migrateLegacy, dailyPicks, setMirrored, hasSide } from './store.js';
-import { readPack } from './pack.js';
+import { readPack, refreshPack } from './pack.js';
 
 const $ = id => document.getElementById(id);
 
@@ -69,7 +69,20 @@ async function boot() {
      אותו דומיין וחולקות localStorage, ובלי התנאי הזה חבילה שנטענה בשורש
      הייתה פותחת את כל התפקידים גם בגרסה שאמורה להחזיק תפקיד אחד. */
   const site = await getJSON('content/booklets.json');
-  const stored = site.gate === 'pack' ? readPack() : null;
+  let stored = site.gate === 'pack' ? readPack() : null;
+
+  /* עדכון תוכן מגיע לבד — אבל רק למי שכבר טען חבילה פעם אחת. בלי זה
+     תרחיש שנוסף לא היה מגיע לטלפון לעולם, כי הגרסה המלאה קוראת
+     מהמכשיר ולא מהרשת. השוואת הגרסאות היא התנאי, ולכן ההורדה קורית
+     רק כשבאמת יש חדש; נכשלה — ממשיכים עם מה שיש, וההודעה במסך הבית
+     היא הנפילה לאחור. */
+  if (stored && site.packUrl && site.version && site.version !== stored.version) {
+    try {
+      stored = await refreshPack(site.packUrl);
+    } catch (err) {
+      console.error(err);
+    }
+  }
 
   const index = stored || site;
   const formations = stored ? stored.formations : await getJSON('content/formations.json');
