@@ -79,7 +79,13 @@ async function boot() {
   )).filter(Boolean);
 
   /* מצב החבילה למסך הבית: האם צריך אותה, והאם היא כאן */
-  const pack = { gated: site.gate === 'pack', loaded: !!stored, version: stored ? stored.version : '' };
+  /* siteVersion היא הגרסה שהאתר מכריז עליה. בגרסה המלאה התוכן מגיע
+     מהחבילה שבמכשיר ולא מהרשת, ולכן תרחיש שנוסף לא היה מגיע לעולם —
+     ההשוואה היא הדבר היחיד שאומר "יש חדש, טען מחדש". */
+  const pack = {
+    gated: site.gate === 'pack', loaded: !!stored,
+    version: stored ? stored.version : '', siteVersion: site.version || ''
+  };
 
   if (!booklets.length && !pack.gated) throw new Error('לא נטענה אף חוברת');
 
