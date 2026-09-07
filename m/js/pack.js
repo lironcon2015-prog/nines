@@ -96,6 +96,26 @@ export function findPackUrl(raw) {
   return hit ? hit[0] : null;
 }
 
+/* רענון אוטומטי מהאתר. נקרא רק כשכבר יש חבילה במכשיר — הטעינה
+   הראשונה נשארת ידנית, והיא השער: מי שפותח את הכתובת בלי חבילה לא
+   מקבל כלום, וגם לא מקבל כפתור שמביא אותה.
+
+   פסק זמן ולא המתנה: החבילה נטענת בפתיחה, וברשת גרועה במגרש עדיף
+   התוכן שכבר במכשיר על מסך שתקוע. */
+const REFRESH_TIMEOUT = 6000;
+
+export async function refreshPack(url) {
+  const stop = new AbortController();
+  const t = setTimeout(() => stop.abort(), REFRESH_TIMEOUT);
+  try {
+    const res = await fetch(url, { cache: 'no-cache', signal: stop.signal });
+    if (!res.ok) throw new Error(url + ' → ' + res.status);
+    return savePack(await res.text(), url);
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 /** מוריד חבילה מכתובת ושומר אותה */
 export async function fetchPack(raw) {
   const url = findPackUrl(raw);

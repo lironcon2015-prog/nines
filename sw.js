@@ -15,7 +15,7 @@
 /* שם המטמון נגזר מגרסה אחת, כדי שכל שינוי קוד ינקה גם את מטמון התוכן.
    בלי זה, תוכן שנשמר בגרסה קודמת יכול להגיע לקוד חדש שמצפה למבנה אחר.
    הוספת תרחיש לא נוגעת בקובץ הזה, ולכן היא עדיין לא דורשת העלאת גרסה. */
-const VERSION = 'v37';
+const VERSION = 'v38';
 const SHELL = 'nines-shell-' + VERSION;
 const CONTENT = 'nines-content-' + VERSION;
 
@@ -75,8 +75,11 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;
 
-  if (url.pathname.includes('/content/')) e.respondWith(contentFirst(req));
-  else e.respondWith(cacheFirst(req));
+  /* pack/ מתנהג כמו content/: הוא התוכן של הגרסה המלאה, ומטמון
+     cache-first היה מגיש לרענון האוטומטי בדיוק את החבילה הישנה */
+  if (url.pathname.includes('/content/') || url.pathname.includes('/pack/')) {
+    e.respondWith(contentFirst(req));
+  } else e.respondWith(cacheFirst(req));
 });
 
 const timeout = ms => new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms));
