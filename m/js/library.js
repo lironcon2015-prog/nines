@@ -67,12 +67,19 @@ function renderPack(pack) {
   const box = $('pack');
   if (!pack || (!pack.gated && !pack.loaded)) { box.hidden = true; return; }
 
+  /* החבילה שבמכשיר מול מה שהאתר מכריז. בלי ההשוואה הזאת תרחיש שנוסף
+     לתוכן לא היה מגיע לטלפון לעולם — הגרסה המלאה קוראת מהחבילה ולא
+     מהרשת, וזה נראה בדיוק כמו "אין עדכון". */
+  const stale = pack.loaded && pack.siteVersion && pack.siteVersion !== pack.version;
+
   box.hidden = false;
-  box.className = 'pack' + (pack.loaded ? ' set' : '');
+  box.className = 'pack' + (pack.loaded ? ' set' : '') + (stale ? ' stale' : '');
   $('pack-t').textContent = pack.loaded
     ? 'החבילה: גרסה ' + (pack.version || '—')
     : 'אין חוברות במכשיר הזה';
-  $('pack-d').textContent = 'טען את קובץ החבילה, והתפקידים ייפתחו. הוא נשמר במכשיר ועובד גם בלי רשת.';
+  $('pack-d').textContent = stale
+    ? 'יש תוכן חדש באתר — גרסה ' + pack.siteVersion + '. טען את החבילה מחדש כדי לקבל אותו.'
+    : 'טען את קובץ החבילה, והתפקידים ייפתחו. הוא נשמר במכשיר ועובד גם בלי רשת.';
   $('pack-filelbl').textContent = pack.loaded ? 'החלף קובץ' : 'בחר קובץ חבילה';
 
   const err = $('pack-error');

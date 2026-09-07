@@ -207,6 +207,11 @@ h2 .term{color:inherit;border-bottom-width:2px}
   letter-spacing:.06em;color:var(--ink-soft)}
 .pack-d{margin:5px 0 0;font-size:13.5px;color:var(--ink-soft);line-height:1.5}
 .pack.set .pack-d{display:none}
+/* חבילה ישנה מול האתר: השורה השקטה חוזרת להיות הודעה, כי אחרת תוכן
+   שנוסף פשוט לא מגיע והמסך נראה כרגיל */
+.pack.set.stale{border:1px solid var(--pink);background:rgba(229,50,111,.06);padding:13px 14px}
+.pack.set.stale .pack-d{display:block;margin-top:4px;color:var(--ink)}
+.pack.set.stale .pack-file{border-color:var(--pink);background:var(--pink);color:var(--paper)}
 .pack-do{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px}
 .pack.set .pack-do{margin-top:9px}
 .pack-file{font-family:'Heebo',sans-serif;font-weight:700;font-size:14px;padding:13px 16px;
