@@ -15,7 +15,7 @@
 /* שם המטמון נגזר מגרסה אחת, כדי שכל שינוי קוד ינקה גם את מטמון התוכן.
    בלי זה, תוכן שנשמר בגרסה קודמת יכול להגיע לקוד חדש שמצפה למבנה אחר.
    הוספת תרחיש לא נוגעת בקובץ הזה, ולכן היא עדיין לא דורשת העלאת גרסה. */
-const VERSION = 'v38';
+const VERSION = 'v39';
 const SHELL = 'nines-shell-' + VERSION;
 const CONTENT = 'nines-content-' + VERSION;
 
@@ -39,6 +39,7 @@ const ASSETS = [
 
 const CONTENT_ASSETS = [
   './content/booklets.json', './content/formations.json',
+  './content/center-back.json',
   './content/kesher-6.json', './content/kesher-8.json',
   './content/left-back.json', './content/winger.json'
 ];
