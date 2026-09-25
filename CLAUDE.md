@@ -63,8 +63,8 @@ node tools-pack.mjs && node tools-single.mjs && sh tools-check.sh
 
 ## חיסכון בטוקנים — פעיל בכל סשן
 
-הכללים המלאים ב-`.claude/skills/token-efficient-workflow/SKILL.md`. הקובץ הזה
-נטען אוטומטית בכל סשן, ולכן העיקר חוזר כאן:
+הכללים המלאים ב-`.claude/skills/token-efficient-workflow/SKILL.md`, והוא מופעל
+בכל סשן דרך `.claude/hooks/session-start.sh`. העיקר חוזר כאן:
 
 - **לחפש לפני שקוראים.** `grep -n` ממוקד או `head`, ולא קריאת קובץ שלם. לא
   לקרוא קובץ ספקולטיבית, ולא לקרוא שוב מה שכבר בהקשר.
