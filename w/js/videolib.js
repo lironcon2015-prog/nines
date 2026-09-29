@@ -10,7 +10,7 @@
 import {
   listCategories, addCategory, renameCategory, removeCategory, countByCategory,
   listVideos, addVideo, updateVideo, removeVideo, categoryName,
-  platformName, embedUrl, embedBlocked, isPortrait, playable,
+  platformName, embedUrl, embedBlocked, isPortrait, playable, mediaFresh,
   posterCandidates, needsPoster, needsDownload, needsUpload, thumbUrl, normalizeUrl, videoCount,
   readOnly, exportDoc, applyRemote, reload
 } from './videos.js';
@@ -36,6 +36,10 @@ let managing = false;    // האם פאנל ניהול הכותרות פתוח
 /* כתובות blob: של התמונות השמורות, לפי מזהה סרטון. נבנות פעם אחת לפני
    הציור, כי הקריאה מ-IndexedDB אסינכרונית והציור אינו. */
 const posterUrls = new Map();
+
+/* סרטונים שהתמונה שלהם כבר הורדה מחדש מהתיקייה בביקור הזה — כדי שתמונה
+   שנכשלת גם אחרי ההורדה לא תיכנס ללולאה של מחיקה והורדה */
+const redownloaded = new Set();
 
 /* מצב הסנכרון האחרון, למה שמוצג בפס העליון */
 let syncState = { busy: false, at: 0, error: '', note: '' };
@@ -346,14 +350,21 @@ function videoCard(v, repaint) {
     img.loading = 'lazy';
     img.referrerPolicy = 'no-referrer';
     /* יורדים ברשימה: תמונה שמורה במכשיר, אחריה הכתובת המקורית, ורק אם
-       גם היא נפלה — האריח. וכשהכול נפל, הכרטיס נכנס לתור ההשלמה במקום
-       להישאר ריק לנצח: זו הייתה הסיבה שתמונה שנשברה לא חזרה מעצמה. */
+       גם היא נפלה — האריח.
+
+       תמונה שמורה אינה נמחקת בגלל הצגה שנכשלה. פעם היא נמחקה, והכתובת
+       המקורית — שפגה מזמן — הייתה הדבר היחיד שנשאר: הצגה אחת שנכשלה
+       (באייפון זה קורה לתמונה מ-IndexedDB) מחקה לתמיד תמונה תקינה.
+       כשיש עותק בתיקייה המשותפת, העותק במכשיר מוחלף בו, פעם אחת בביקור. */
     let at = 0;
     img.onerror = () => {
       if (++at < sources.length) { img.src = sources[at]; return; }
       tile();
-      posters.drop(v.id);
-      posterUrls.delete(v.id);
+      if (v.posterRef && cloud.isOn() && !redownloaded.has(v.id)) {
+        redownloaded.add(v.id);
+        posterUrls.delete(v.id);
+        posters.drop(v.id).then(() => backfillPosters(repaint));
+      }
     };
     img.src = sources[0];
     thumb.appendChild(img);
@@ -411,9 +422,9 @@ function videoCard(v, repaint) {
      הזה: היא ממורכזת מעצם הבנייה, אף פעם לא צריך לגלול אליה, והסרטון
      גם גדול בהרבה על מסך טלפון. סגירה מחזירה בדיוק לאותו מקום.
 
-     סדר הניסיונות: קודם קובץ הווידאו עצמו בנגן שלנו, ורק אם אין —
-     הנגן המשובץ של הפלטפורמה. הקובץ עדיף בכל מובן: הוא מתנגן בלי
-     אפליקציה ובלי חשבון, ואין לו דעה על קישור מקוצר.
+     סדר הניסיונות: קודם הנגן המשובץ של הפלטפורמה, בתוך השכבה שלנו —
+     הוא נבנה מהקישור הקבוע ולא פג. קובץ הווידאו עצמו רק כשאין נגן
+     משובץ (קישור מקוצר), כי הכתובת שלו חתומה ופגה אחרי שעות.
 
      הכול עובד זהה במכשיר שרואה בלבד: הניגון נגזר מהקישור ומהקובץ
      שבמסמך, ולא ממי שהוסיף אותו. */
@@ -472,10 +483,12 @@ function videoCard(v, repaint) {
     };
 
     play.onclick = async () => {
-      /* מנגנים מיד ממה שכבר יש, בלי לפנות לרשת. קובץ ישן אינו סיבה
-         להמתנה: אם הכתובת שלו פגה, onerror מרענן ומנסה שוב תוך כדי. */
-      if (v.media) { showFile(v.media); return; }
+      /* הנגן המשובץ קודם. הוא נבנה מהקישור הקבוע — אותו קישור ש"פתח"
+         משתמש בו — ולכן הוא לא פג. קודם נוסה כאן הקובץ עצמו, שכתובתו
+         פגה אחרי שעות: כמעט כל לחיצה נכשלה עליו, חיכתה לשירותי התיווך,
+         ונשארה על "לא נטען" כשהם לא ענו. */
       if (embed) { showEmbed(embed); return; }
+      if (v.media && mediaFresh(v)) { showFile(v.media); return; }
 
       /* רק כשאין לנו כלום — אז שווה לחכות */
       let lastLog = [];
@@ -498,6 +511,8 @@ function videoCard(v, repaint) {
           return;
         }
       }
+      /* אין נגן משובץ וגם רענון לא הצליח — הקובץ הישן שווה ניסיון אחרון */
+      if (v.media) { showFile(v.media); return; }
       play.textContent = 'לא נטען — נסה שוב';
       /* הדיווח נכתב פעם אחת, גם אם לוחצים שוב ושוב */
       if (!body.querySelector('.vlog')) body.appendChild(report(lastLog));
@@ -766,10 +781,17 @@ async function backfillPosters(repaint) {
 
     if (autoOn() && !readOnly()) {
       const todo = needsPoster(saved).slice(0, BACKFILL);
+      /* כאן מגיע רק סרטון שהתמונה שלו מעולם לא נשמרה. הכתובת שנשמרה
+         בהוספה חתומה ופגה, ולכן כשהיא נכשלת מחפשים כתובת חדשה — אחרת
+         הכרטיס ניסה את אותה כתובת מתה בכל פתיחה, לנצח. */
       for (const v of todo) {
-        const known = v.posterUrl || thumbUrl(v.full || v.url);
-        const src = known || (await lookup(v.url)).image;
-        if (await savePoster(v.id, src, null)) { changed = true; saved.add(v.id); }
+        const known = thumbUrl(v.full || v.url) || v.posterUrl;
+        let ok = await savePoster(v.id, known, null);
+        if (!ok) {
+          const fresh = (await lookup(v.url)).image;
+          if (fresh && fresh !== known) ok = await savePoster(v.id, fresh, null);
+        }
+        if (ok) { changed = true; saved.add(v.id); }
       }
     }
 
