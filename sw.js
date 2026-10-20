@@ -15,7 +15,7 @@
 /* שם המטמון נגזר מגרסה אחת, כדי שכל שינוי קוד ינקה גם את מטמון התוכן.
    בלי זה, תוכן שנשמר בגרסה קודמת יכול להגיע לקוד חדש שמצפה למבנה אחר.
    הוספת תרחיש לא נוגעת בקובץ הזה, ולכן היא עדיין לא דורשת העלאת גרסה. */
-const VERSION = 'v40';
+const VERSION = 'v41';
 const SHELL = 'nines-shell-' + VERSION;
 const CONTENT = 'nines-content-' + VERSION;
 
@@ -59,12 +59,25 @@ self.addEventListener('install', e => {
   })());
 });
 
+/* מוחקים רק מטמון ישן *של הגרסה הזאת*. כל האתרים ב-Pages של החשבון יושבים
+   על אותו מקור (lironcon2015-prog.github.io), והמטמונים משותפים לכל המקור:
+   המחיקה של "כל מה שאינו שלי" מחקה בכל עדכון את העותק של MGivatayim, של
+   ספריית המתכונים — וגם של w/ ו-m/, שכל אחת מהן מחקה את שתי האחרות.
+   הגרסה (מלאה, -w, -m) היא הסיומת של VERSION, ו-tools-single.mjs מוסיף
+   אותה. kesher8-* הם שמות המטמון של nines מלפני השינוי בשם. */
+const VARIANT = (VERSION.match(/-[a-z]+$/) || [''])[0];
+const OWN = /^nines-(shell|content)-v\d+(-[a-z]+)?$/;
+const isOld = k => {
+  if (k === SHELL || k === CONTENT) return false;
+  if (/^kesher8-/.test(k)) return !VARIANT;
+  const m = k.match(OWN);
+  return !!m && (m[2] || '') === VARIANT;
+};
+
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(
-        keys.filter(k => k !== SHELL && k !== CONTENT).map(k => caches.delete(k))
-      ))
+      .then(keys => Promise.all(keys.filter(isOld).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
