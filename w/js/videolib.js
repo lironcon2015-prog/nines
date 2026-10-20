@@ -235,20 +235,45 @@ function body() {
   return frag;
 }
 
+/* תמונה שכבר נטענה לא נטענת שוב. כל ציור בונה כרטיסים חדשים, ו-<img> חדש
+   מופיע ריק לרגע ואז "קופץ" — גם כשהכתובת זהה (בעל הריפו: "יש קפיצה של
+   התמונות"). לכן לפני הציור נאספות התמונות הטעונות, ואחריו כל <img> חדש עם
+   אותה כתובת מוחלף בישן, כמו שהוא. אותו פתרון כמו keepImages בגבעתיים. */
+function keepImages(scope, build) {
+  const loaded = new Map();
+  scope.querySelectorAll('img').forEach(i => { if (i.complete && i.naturalWidth) loaded.set(i.src, i); });
+  build();
+  scope.querySelectorAll('img').forEach(i => {
+    const old = loaded.get(i.src);
+    if (old && old !== i) { loaded.delete(i.src); i.replaceWith(old); }
+  });
+}
+
+/* מצב הסנכרון משתנה פעמיים בכל פתיחה (מתחיל, נגמר). זה משנה רק את השורה
+   שבכותרת — אין סיבה לבנות בגללו את כל הכרטיסים מחדש. */
+function paintHeader() {
+  const h = root && root.querySelector('header.top');
+  if (h) h.replaceWith(header());
+}
+
 function paint() {
   if (!root) return;
+  keepImages(root, paintAll);
+}
+
+function paintAll() {
   const keepFocus = document.activeElement && document.activeElement.id === 'q';
   root.textContent = '';
   root.appendChild(header());
   root.appendChild(searchBox());
   const holder = el('div');
   root.appendChild(holder);
-  repaintBody = () => {
+  repaintBody = () => keepImages(holder, () => {
     /* קטגוריה שנמחקה בינתיים (גם ממכשיר אחר) — חוזרים להכול */
     if (filter && !categoryName(filter)) filter = null;
     holder.textContent = '';
     holder.appendChild(body());
-  };
+  });
   repaintBody();
   if (keepFocus) $('q').focus();
   $('fab').hidden = readOnly();
@@ -749,12 +774,14 @@ export function mountLibrary(node, prefill) {
   reload();
   document.title = 'ספריית הסרטונים — תשיעיות';
   $('fab').onclick = () => openEditor(null, null);
-  paint();
-  loadPosterUrls().then(paint);
+  /* ציור ראשון אחרי שידוע אילו תמונות שמורות במכשיר (IndexedDB, עשרות
+     אלפיות שנייה) — ולא לפני: ציור מוקדם הציג את הכתובות המקוריות או אות,
+     ומיד אחריו ציור שני עם התמונות השמורות. זו הייתה הקפיצה הראשונה. */
+  loadPosterUrls().then(() => { if (root === node) paint(); });
   offSync = onSync(changed => {
     if (!root || root.hidden) return;
     if (changed) loadPosterUrls().then(() => { paint(); backfillPosters(); });
-    else paint();
+    else paintHeader();
   });
   /* חזרה לאפליקציה היא הרגע לסנכרן: בדיוק פתחו אותה כדי לראות מה יש */
   onVisible = () => { if (document.visibilityState === 'visible' && root && !root.hidden) syncNow(); };
