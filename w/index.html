@@ -7,7 +7,7 @@
 <title>הכנף — תשיעיות</title>
 <meta name="description" content="הכנף בכדורגל תשיעיות: מיקומים, תנועות, החלטות עם הכדור וטעויות נפוצות.">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#E8E2D4">
+<meta name="theme-color" content="#F3F5F9">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="תשיעיות">
@@ -15,16 +15,52 @@
 <link rel="icon" href="icons/favicon-32.png" sizes="32x32">
 <link rel="stylesheet" href="fonts.css">
 <link rel="stylesheet" href="css/app.css">
+<script>
+/* ערכת הצבעים לפני הציור הראשון — אחרת מי שבחר כהה רואה הבזק בהיר בכל פתיחה.
+   בהיר כברירת מחדל; כהה רק כשנבחר במסך ההגדרות. */
+try { if (localStorage.getItem('k8:theme') === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) {}
+</script>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs><linearGradient id="gold-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F2CB55"/><stop offset="1" stop-color="#DDAA22"/></linearGradient></defs>
+  <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11 12 4l8 7v9H4z"/><path d="M10 20v-5h4v5"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M5 12h14"/><circle cx="12" cy="12" r="2.5"/></symbol>
+  <symbol id="i-quiz" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14M12 17.2v.1"/></symbol>
+  <symbol id="i-vid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5v5l4.5-2.5z" fill="currentColor"/></symbol>
+  <symbol id="i-cone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M9 4h6l4 15H5z"/><path d="M3 20h18M7.5 12h9"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></symbol>
+  <symbol id="i-bowl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5v5l4.5-2.5z" fill="currentColor"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/></symbol>
+  <symbol id="i-grip" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="7.5" r="1.3"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="4" width="7" height="8" rx="2"/><rect x="13" y="4" width="7" height="8" rx="2"/><rect x="4" y="14" width="7" height="6" rx="2"/><rect x="13" y="14" width="7" height="6" rx="2"/></symbol>
+  <symbol id="i-rows" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="5" height="5" rx="1.5"/><rect x="4" y="14" width="5" height="5" rx="1.5"/><path d="M12 7h8M12 16h8"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></symbol>
+  <symbol id="i-sync" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.5-4.5L4 8M4 4v4h4M4 13a8 8 0 0 0 14.5 4.5L20 16M20 20v-4h-4"/></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4.5 4.5 0 0 1-.5-9 6 6 0 0 1 11.6 1.5A3.8 3.8 0 0 1 17.5 18Z"/></symbol>
+</svg>
+
 <div class="wrap">
 
   <div class="state" id="state">טוען…</div>
 
   <!-- ===== מסך הבית ===== -->
   <section id="library" hidden>
-    <div class="eyebrow" id="lib-eyebrow"></div>
-    <h1 id="lib-title"></h1>
+    <header class="top">
+      <div class="crest"><span id="lib-crest"><svg class="i"><use href="#i-cone"/></svg></span></div>
+      <div class="top-text"><h1 id="lib-title"></h1><p id="lib-eyebrow"></p></div>
+      <a class="icon-btn" href="#/s" aria-label="הגדרות וסנכרון"><svg class="i"><use href="#i-gear"/></svg></a>
+    </header>
     <p class="lede" id="lib-lede"></p>
 
     <div class="me" id="me" hidden></div>
@@ -51,62 +87,57 @@
     <!-- התפקיד שנבחר: כרטיס אחד גדול. או הבוחר, כשעוד לא נבחר מספר. -->
     <div id="hero"></div>
 
+    <!-- התרחישים של התפקיד שלך -->
+    <div id="scenlist"></div>
+
     <!-- וכל השאר, מקופל -->
     <details class="roles" id="roles" hidden>
       <summary id="roles-sum">ספריית התפקידים</summary>
       <div class="rolelist" id="rolelist"></div>
     </details>
 
-    <button id="videosgo" type="button">ספריית הסרטונים<span id="videosn"></span><span class="videostag" id="videostag" hidden></span></button>
-    <button id="sharego" type="button">ספרייה משותפת</button>
-
     <p class="foot"><span id="lib-foot"></span><span class="ver" id="lib-ver"></span></p>
   </section>
 
   <!-- ===== מסך חוברת ===== -->
   <section id="booklet" hidden>
-    <a class="back" href="#/" id="back">חזרה ←</a>
+    <a class="back" href="#/" id="back"><svg class="i"><use href="#i-back"/></svg>בית</a>
 
-    <div class="eyebrow" id="eyebrow"></div>
-
-    <div class="head">
-      <div class="mark" aria-hidden="true"><span class="b" id="mark-b"></span><span class="p" id="mark-p"></span></div>
-      <div>
-        <h1 id="b-title"></h1>
-        <p class="lede" id="b-lede"></p>
-      </div>
-    </div>
+    <header class="top bhead">
+      <div class="crest" aria-hidden="true"><span class="num" id="mark-b"></span><span id="mark-p" hidden></span></div>
+      <div class="top-text"><h1 id="b-title"></h1><p id="eyebrow"></p></div>
+    </header>
+    <p class="lede" id="b-lede"></p>
 
     <div class="track" id="track" aria-hidden="true"></div>
     <div class="count" id="count"></div>
 
-    <div class="formation" id="formation">
-      <b id="f-label"></b>
-    </div>
-
-    <div class="side" id="side">
-      <span id="side-label"></span>
-      <button type="button" data-foot="R" aria-pressed="true">ימין</button>
-      <button type="button" data-foot="L" aria-pressed="false">שמאל</button>
-      <em id="side-hint"></em>
-    </div>
+    <details class="formation" id="formation">
+      <summary id="f-label"></summary>
+    </details>
 
     <div class="rail"><div class="chips" id="chips" role="tablist"></div></div>
 
+    <div class="side" id="side">
+      <em id="side-hint"></em>
+      <span id="side-label"></span>
+      <span class="seg"><button type="button" data-foot="R" aria-pressed="true">ימין</button><button type="button" data-foot="L" aria-pressed="false">שמאל</button></span>
+    </div>
+
     <div class="board" id="board">
+      <div class="playrow"><button class="play glass" id="play" type="button">הראה לי את התנועה</button></div>
       <div class="legend">
-        <span><i class="sw" style="background:#1F4FA8"></i>הקבוצה שלנו</span>
-        <span><i class="sw" style="background:#E5326F"></i><span id="lg-role"></span></span>
-        <span><i class="sw" style="border:1.6px solid #6E7A6B"></i>יריב</span>
-        <span><i class="sw" style="background:linear-gradient(90deg,#E5326F 60%,transparent 0)"></i>ריצה</span>
-        <span><i class="sw" style="background:repeating-linear-gradient(90deg,#1F4FA8 0 5px,transparent 5px 9px)"></i>מסירה</span>
-        <span><i class="sw" style="border:1.4px dashed #E5326F"></i>נקודת התחלה</span>
+        <span><i class="sw sw-me"></i><span id="lg-role"></span></span>
+        <span><i class="sw sw-our"></i>הקבוצה שלנו</span>
+        <span><i class="sw sw-opp"></i>יריב</span>
+        <span><i class="sw sw-run"></i>ריצה</span>
+        <span><i class="sw sw-pass"></i>מסירה</span>
+        <span><i class="sw sw-ghost"></i>נקודת התחלה</span>
       </div>
     </div>
-    <div class="playrow"><button class="play" id="play" type="button">הראה לי את התנועה</button></div>
     <div class="hint" id="hint">החלק ימינה ושמאלה כדי לעבור בין התרחישים</div>
 
-    <div class="panel" id="panel">
+    <div class="panel card" id="panel">
       <div class="phase" id="p-phase"></div>
       <h2 id="p-title"></h2>
       <p class="sub" id="p-sub"></p>
@@ -116,22 +147,23 @@
 
       <ul id="p-does"></ul>
       <details class="mistake"><summary>טעות נפוצה</summary><span id="p-mistake"></span></details>
-
-      <button class="learn" id="learn" type="button" aria-pressed="false"><span id="learn-txt">סמן שלמדתי את זה</span></button>
-      <div class="nav">
-        <button id="prev" type="button">הקודם</button>
-        <button id="next" type="button">התרחיש הבא</button>
-      </div>
     </div>
 
     <p class="foot" id="closing">
       <button class="reset" id="reset" type="button">אפס את הסימונים</button>
     </p>
+
+    <!-- הקודם · למדתי · הבא: צף מעל הניווט, מתחת לאגודל בכל מקום בדף -->
+    <div class="dock glass" id="b-dock">
+      <button class="d" id="prev" type="button" aria-label="התרחיש הקודם"><svg class="i"><use href="#i-prev"/></svg></button>
+      <button class="d mid" id="learn" type="button" aria-pressed="false"><span id="learn-txt">סמן שלמדתי את זה</span></button>
+      <button class="d" id="next" type="button" aria-label="התרחיש הבא"><svg class="i"><use href="#i-next"/></svg></button>
+    </div>
   </section>
 
   <!-- ===== מסך מבדק ===== -->
   <section id="quiz" hidden>
-    <a class="back" href="#/" id="q-back">חזרה ←</a>
+    <a class="back" href="#/" id="q-back"><svg class="i"><use href="#i-back"/></svg>בית</a>
     <div class="eyebrow" id="q-eyebrow"></div>
 
     <div class="track" id="q-track" aria-hidden="true"></div>
@@ -147,76 +179,27 @@
       <div class="qfeed" id="q-feed" hidden></div>
       <div class="qchoices" id="q-choices" hidden></div>
 
-      <div class="nav"><button id="q-confirm" type="button">זהו, זה המקום</button></div>
+      <div class="dock glass"><button class="d go" id="q-confirm" type="button">זהו, זה המקום</button></div>
     </div>
 
-    <div id="q-result" hidden></div>
+    <div id="q-result" class="card" hidden></div>
   </section>
 
-  <!-- ===== מסך ספריית הסרטונים ===== -->
-  <section id="videos" hidden>
-    <a class="back" href="#/" id="v-back">חזרה לחוברות ←</a>
-
-    <div class="eyebrow">סרטונים ששווה לראות שוב</div>
-    <h1>ספריית הסרטונים</h1>
-    <p class="lede" id="v-lede"></p>
-
-    <div class="vsync" id="v-sync" hidden></div>
-
-    <details class="vform" id="v-form">
-      <summary id="v-formtitle">הוסף סרטון</summary>
-      <form id="v-formel" novalidate>
-        <label for="v-url">הקישור לסרטון</label>
-        <div class="vurl">
-          <input type="url" id="v-url" inputmode="url" autocomplete="off"
-                 placeholder="https://www.instagram.com/reel/…">
-          <button type="button" id="v-paste">הדבק</button>
-        </div>
-
-        <label for="v-title">שם הסרטון <em>לא חובה</em></label>
-        <input type="text" id="v-title" autocomplete="off" placeholder="למשל: מסירה ראשונה מתחת ללחץ">
-
-        <label for="v-cat">כותרת</label>
-        <select id="v-cat"></select>
-        <input type="text" id="v-newcat" hidden autocomplete="off" placeholder="שם הכותרת החדשה">
-
-        <label for="v-note">מה לשים לב בו <em>לא חובה</em></label>
-        <textarea id="v-note" rows="2" placeholder="שורה אחת שתזכיר לך למה שמרת אותו"></textarea>
-
-        <label class="vauto" for="v-auto">
-          <input type="checkbox" id="v-auto" checked>
-          <span>הבא תמונה ושם אוטומטית<em>הקישור נשלח לשירות תצוגה מקדימה, שמחזיר את התמונה של הסרטון, את שמו, ואת הכתובת המלאה של קישור מקוצר. בלי זה — אין תמונות, וקישור מקוצר לא ינוגן כאן.</em></span>
-        </label>
-        <button type="button" class="vcheck" id="v-check">בדוק את השירותים</button>
-        <div class="vcheckout" id="v-checkout" hidden></div>
-
-        <p class="verror" id="v-error" hidden></p>
-        <div class="vsubmit">
-          <button type="submit" id="v-save">הוסף לספרייה</button>
-          <button type="button" id="v-cancel" hidden>בטל</button>
-        </div>
-      </form>
-    </details>
-
-    <div class="rail"><div class="chips" id="v-chips" role="tablist"></div></div>
-
-    <button class="vmanage" id="v-managego" type="button" aria-expanded="false">נהל כותרות</button>
-    <div class="cats" id="v-manage" hidden></div>
-
-    <div class="vlist" id="v-list"></div>
-
-    <p class="foot" id="v-foot"></p>
-  </section>
-
-  <!-- ===== מסך הספרייה המשותפת ===== -->
-  <section id="share" hidden>
-    <a class="back" href="#/" id="s-back">חזרה לחוברות ←</a>
-    <div class="eyebrow">דרייב · בלי חשבון ובלי סיסמה</div>
-    <h1 id="s-title">ספרייה משותפת</h1>
-    <div id="s-body"></div>
-  </section>
+  <!-- ===== הסרטונים, הקטגוריות וההגדרות — אותם מסכים כמו בספריית המתכונים ===== -->
+  <section id="videos" hidden></section>
+  <section id="vcats" hidden></section>
+  <section id="share" hidden></section>
 
 </div>
+
+<nav class="tabbar glass" id="tabbar" hidden>
+  <a id="tab-home" href="#/"><svg class="i"><use href="#i-home"/></svg><span>בית</span></a>
+  <a id="tab-book" href="#/"><svg class="i"><use href="#i-book"/></svg><span>חוברת</span></a>
+  <a id="tab-quiz" href="#/"><svg class="i"><use href="#i-quiz"/></svg><span>מבדק</span></a>
+  <a id="tab-vid" href="#/v"><svg class="i"><use href="#i-vid"/></svg><span>סרטונים</span></a>
+</nav>
+<button class="fab glass" id="fab" type="button" hidden><svg class="i"><use href="#i-plus"/></svg>סרטון</button>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script type="module" src="js/app.js"></script>
 </body>

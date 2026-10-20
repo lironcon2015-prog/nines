@@ -118,7 +118,6 @@ function build(id, dir, sideArg, scope = dir) {
   html = replace(html, /(<meta name="viewport"[^>]*>)/,
     '$1\n<meta name="app-scope" content="' + scope.replace(/[^a-z0-9-]/gi, '') + '">',
     'meta viewport ב-index.html');
-  html = replace(html, /כל החוברות ←/g, 'חזרה ←', 'קישורי החזרה ב-index.html');
   writeFileSync(join(out, 'index.html'), html);
 
   /* --- התוכן: חוברת אחת. בלי gate, כי כאן התוכן מגיע עם האתר --- */

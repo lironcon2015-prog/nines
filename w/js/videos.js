@@ -1,4 +1,5 @@
-/* ספריית הסרטונים.
+/* ספריית הסרטונים — הנתונים. אותו קובץ כמו בספריית המתכונים (Recipes),
+   פחות המפתחות וקטגוריות הפתיחה.
 
    סרטון שראית באינסטגרם או ביוטיוב נשמר כאן כקישור, לא כקובץ — האפליקציה
    אינה מעלה וידאו לשום מקום, והצפייה עצמה נעשית מול הפלטפורמה המקורית.
@@ -21,8 +22,8 @@ const LOCAL_KEY = 'k8:videos';
 const SHARED_KEY = 'k8:videos:shared';
 const DOC_VERSION = 2;
 
-/* שלוש הכותרות שאיתן מתחילים. אפשר להוסיף, לשנות שם ולמחוק — ולכן הן
-   נשמרות כרשומות עם מזהה, ולא כמחרוזות: שינוי שם לא מיתם את הסרטונים. */
+/* הקטגוריות שאיתן מתחילים. אפשר להוסיף, לשנות שם, למחוק ולשנות סדר — ולכן
+   הן נשמרות כרשומות עם מזהה, ולא כמחרוזות: שינוי שם לא מיתם סרטונים. */
 const SEED = ['אימוני טכניקה', 'אימוני טקטיקה', 'אימוני כושר'];
 
 /* מחיקה אינה הסרה מיידית אלא סימון. בלי זה, סרטון שמחקת היה קם לתחייה
@@ -37,7 +38,7 @@ function emptyDoc() {
   return {
     v: DOC_VERSION,
     updatedAt: now(),
-    categories: SEED.map(name => ({ id: uid(), name, at: now(), updatedAt: now() })),
+    categories: SEED.map((name, i) => ({ id: uid(), name, order: i, at: now(), updatedAt: now() })),
     videos: []
   };
 }
@@ -54,7 +55,7 @@ function readDoc(key) {
       if (parsed && Array.isArray(parsed.categories) && Array.isArray(parsed.videos)) return parsed;
     }
   } catch (e) { /* מצב פרטי או מסמך פגום — מתחילים מחדש */ }
-  /* המצטרף מתחיל ריק ולא עם שלוש כותרות משלו — הן יגיעו מהסנכרון */
+  /* המצטרף מתחיל ריק ולא עם קטגוריות משלו — הן יגיעו מהסנכרון */
   return key === SHARED_KEY
     ? { v: DOC_VERSION, updatedAt: 0, categories: [], videos: [] }
     : emptyDoc();
@@ -193,8 +194,23 @@ export function applyRemote(remote) {
 
 /* --- קטגוריות --- */
 
+/* הסדר הוא שדה של כל קטגוריה ולא סדר המערך: המיזוג פריט-מול-פריט שומר
+   את סדר המערך של מי שהיה קודם, ושינוי סדר במכשיר אחד לא היה עובר. קטגוריה
+   בלי order (ישנה) נכנסת לפי זמן היצירה. */
 export function listCategories() {
-  return doc.categories.filter(c => !c.deleted);
+  const key = c => (typeof c.order === 'number' ? c.order : 1e6 + (c.at || 0) / 1e13);
+  return doc.categories.filter(c => !c.deleted).sort((a, b) => key(a) - key(b));
+}
+
+/** סדר חדש לכל הקטגוריות, לפי רשימת מזהים. רק מה שזז מקבל updatedAt. */
+export function reorderCategories(ids) {
+  if (readOnly()) return false;
+  ids.forEach((id, i) => {
+    const cat = doc.categories.find(c => c.id === id && !c.deleted);
+    if (cat && cat.order !== i) { cat.order = i; cat.updatedAt = now(); }
+  });
+  save();
+  return true;
 }
 
 export function categoryName(id) {
@@ -209,7 +225,8 @@ export function addCategory(name) {
   if (!clean) return null;
   const same = doc.categories.find(c => c.name === clean && !c.deleted);
   if (same) return same;
-  const cat = { id: uid(), name: clean, at: now(), updatedAt: now() };
+  const last = listCategories().reduce((m, c) => Math.max(m, typeof c.order === 'number' ? c.order : -1), -1);
+  const cat = { id: uid(), name: clean, order: last + 1, at: now(), updatedAt: now() };
   doc.categories.push(cat);
   save();
   return cat;
@@ -226,7 +243,7 @@ export function renameCategory(id, name) {
   return true;
 }
 
-/** מחיקת כותרת אינה מוחקת סרטונים — הם עוברים ל"בלי כותרת" */
+/** מחיקת קטגוריה אינה מוחקת סרטונים — הם עוברים ל"בלי קטגוריה" */
 export function removeCategory(id) {
   if (readOnly()) return false;
   const cat = doc.categories.find(c => c.id === id && !c.deleted);

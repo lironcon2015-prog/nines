@@ -4,11 +4,14 @@
 import { mountBooklet } from './booklet.js';
 import { renderLibrary } from './library.js';
 import { mountQuiz, buildQuestions } from './quiz.js';
-import { mountVideos } from './videolib.js';
-import { mountShare } from './sharelib.js';
+import { mountLibrary } from './videolib.js';
+import { mountCategories } from './vcats.js';
+import { mountSync } from './sync.js';
 import { migrate } from './videos.js';
 import * as cloud from './cloud.js';
-import { migrateLegacy, dailyPicks, setMirrored, hasSide } from './store.js';
+import { afterLayers } from './ui.js';
+import { mirrorRole } from './pitch.js';
+import { migrateLegacy, dailyPicks, setMirrored, hasSide, isMirrored, getMyNumber, getLast } from './store.js';
 import { readPack, refreshPack } from './pack.js';
 
 const $ = id => document.getElementById(id);
@@ -33,6 +36,7 @@ function parseHash() {
   if (parts[0] === 'q' && parts[1]) return { view: 'quiz', id: parts[1], scenario: parts[2] || null };
   /* האימון הקצר. התרחישים נבחרים בכל כניסה מחדש ולכן אינם בכתובת */
   if (parts[0] === 't' && parts[1]) return { view: 'train', id: parts[1] };
+  if (parts[0] === 'v' && parts[1] === 'c') return { view: 'vcats' };
   if (parts[0] === 'v') return { view: 'videos' };
   if (parts[0] === 's') return { view: 'share' };
   /* קישור הצטרפות שנשלח בוואטסאפ. הכתובת וקוד הקריאה יושבים בתוכו,
@@ -134,18 +138,63 @@ async function boot() {
   }
 
   function screens(active) {
-    ['library', 'booklet', 'quiz', 'videos', 'share'].forEach(id => { $(id).hidden = id !== active; });
+    ['library', 'booklet', 'quiz', 'videos', 'vcats', 'share'].forEach(id => { $(id).hidden = id !== active; });
+  }
+
+  /* --- הסרגל התחתון ---
+     "חוברת" ו"מבדק" פותחים את החוברת שלך: האחרונה שנפתחה, אחרת זו של
+     המספר שבחרת, אחרת הראשונה. בלי חוברות (הגרסה המלאה לפני החבילה) הם
+     כבויים — אין לאן ללכת. */
+  const LAST_KEY = 'k8:lastBooklet';
+  const myBooklet = () => {
+    let last = null;
+    try { last = localStorage.getItem(LAST_KEY); } catch (e) { /* מצב פרטי */ }
+    const byLast = booklets.find(b => b.id === last);
+    if (byLast) return byLast;
+    if (booklets.length === 1) return booklets[0];
+    const me = getMyNumber();
+    const byNum = me > 0 && booklets.find(b => {
+      const f = formations[b.formation];
+      return (f && isMirrored() ? mirrorRole(f, b.role) : b.role) === me;
+    });
+    return byNum || booklets[0] || null;
+  };
+  const TAB_OF = { library: 'home', booklet: 'book', quiz: 'quiz', train: 'quiz', videos: 'vid', vcats: 'vid', shared: 'book' };
+  function paintTabs(route) {
+    const b = myBooklet();
+    const set = (id, href) => {
+      const a = $('tab-' + id);
+      if (href) { a.href = href; a.removeAttribute('aria-disabled'); }
+      else { a.href = '#/'; a.setAttribute('aria-disabled', 'true'); }
+      if (TAB_OF[route.view] === id) a.setAttribute('aria-current', 'page');
+      else a.removeAttribute('aria-current');
+    };
+    set('home', '#/');
+    set('book', b ? '#/b/' + b.id + (getLast(b.id) ? '/' + getLast(b.id) : '') : null);
+    set('quiz', b ? '#/q/' + b.id : null);
+    set('vid', '#/v');
+    $('tabbar').hidden = false;
   }
 
   function show(route) {
     if (current) { current.destroy(); current = null; }
+    document.body.classList.remove('small');
+    if (route.id) { try { localStorage.setItem(LAST_KEY, route.id); } catch (e) { /* לא קריטי */ } }
+    paintTabs(route);
 
     if (route.view === 'videos') {
       screens('videos');
       /* קישור ששותף לאפליקציה נצרך פעם אחת, כדי שרענון לא ימלא את הטופס שוב */
       const prefill = shared;
       shared = null;
-      current = mountVideos(prefill);
+      current = mountLibrary($('videos'), prefill);
+      window.scrollTo(0, 0);
+      return;
+    }
+
+    if (route.view === 'vcats') {
+      screens('vcats');
+      current = mountCategories($('vcats'));
       window.scrollTo(0, 0);
       return;
     }
@@ -155,7 +204,7 @@ async function boot() {
       /* גם כאן פעם אחת: אחרי ההצטרפות רענון לא אמור לשאול שוב */
       const invite = route.join ? cloud.decodeJoin(route.join) : joining;
       joining = null;
-      current = mountShare(invite);
+      current = mountSync($('share'), invite);
       window.scrollTo(0, 0);
       return;
     }
@@ -218,7 +267,20 @@ async function boot() {
     window.scrollTo(0, 0);
   }
 
-  window.addEventListener('hashchange', () => show(parseHash()));
+  /* מעבר מסך מחכה ש"חזרה" שנשלחה בסגירת גיליון או נגן תנחת — אחרת היא
+     נוחתת אחרי המעבר ומבטלת אותו (ui.js) */
+  window.addEventListener('hashchange', () => afterLayers(() => show(parseHash())));
+
+  /* הסרגל מתכווץ בגלילה למטה וחוזר בגלילה למעלה, כמו בגבעתיים. הגלילה
+     נחתכת לגבולות הדף — הקפיצה של אייפון בסוף נראית כגלילה למעלה. */
+  let lastY = 0;
+  window.addEventListener('scroll', () => {
+    const max = document.documentElement.scrollHeight - innerHeight;
+    const y = Math.max(0, Math.min(max, scrollY));
+    if (y > lastY + 6 && y > 60) document.body.classList.add('small');
+    else if (y < lastY - 6 || y < 20) document.body.classList.remove('small');
+    lastY = y;
+  }, { passive: true });
 
   const params = new URLSearchParams(location.search);
 
@@ -236,8 +298,6 @@ async function boot() {
   const legacy = params.get('b');
   if (legacy && !location.hash) history.replaceState(null, '', '#/b/' + legacy);
 
-  $('videosgo').onclick = () => { location.hash = '#/v'; };
-  $('sharego').onclick = () => { location.hash = '#/s'; };
 
   document.documentElement.classList.remove('loading');
   $('state').style.display = 'none';
@@ -245,7 +305,8 @@ async function boot() {
 
   /* מקשי חצים — נרשם פעם אחת ומופנה למסך הפעיל */
   document.addEventListener('keydown', e => {
-    if (!current) return;
+    if (!current || !current.go) return;
+    if (e.target.closest && e.target.closest('input, textarea')) return;
     if (e.key === 'ArrowLeft') current.go(1);
     if (e.key === 'ArrowRight') current.go(-1);
   });
