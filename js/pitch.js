@@ -131,7 +131,9 @@ export const PER_METER = 8;
 
 const ARROW_CLASS = { pass: 'a-pass', opt: 'a-opt', press: 'a-press', run: 'a-run' };
 const ARROW_MARKER = { pass: 'hb', press: 'hg', run: 'hp', opt: 'hp' };
-const HEAD_FILL = { hp: '#E5326F', hb: '#1F4FA8', hg: '#6E7A6B' };
+/* ראשי החצים בצבע של החץ — הצבעים עצמם ב-CSS (head-hp וכו'), כדי שיתחלפו
+   עם ערכת הצבעים (בהירה/כהה) בלי לבנות את המגרש מחדש */
+const HEAD_FILL = ['hp', 'hb', 'hg'];
 
 let uidSeq = 0;
 
@@ -146,21 +148,23 @@ export function buildPitch() {
   svg.dataset.uid = uid;
 
   const defs = el('defs');
-  for (const [name, fill] of Object.entries(HEAD_FILL)) {
+  for (const name of HEAD_FILL) {
     const m = el('marker', {
       id: `${name}-${uid}`, viewBox: '0 0 10 10', refX: 8, refY: 5,
       markerWidth: 5, markerHeight: 5, orient: 'auto-start-reverse'
     });
-    m.appendChild(el('path', { d: 'M0 0 L10 5 L0 10 z', fill }));
+    m.appendChild(el('path', { d: 'M0 0 L10 5 L0 10 z', class: 'head-' + name }));
     defs.appendChild(m);
   }
   svg.appendChild(defs);
 
-  svg.appendChild(el('rect', { x: 20, y: 20, width: 360, height: 580, fill: '#D6DAC6' }));
+  /* פסי דשא כמו בגבעתיים: שמונה רצועות לסירוגין. הצבעים ב-CSS. */
+  svg.appendChild(el('rect', { x: 20, y: 20, width: 360, height: 580, class: 'field' }));
+  for (let i = 1; i < 8; i += 2) svg.appendChild(el('rect', { x: 20, y: 20 + i * 72.5, width: 360, height: 72.5, class: 'stripe' }));
   svg.appendChild(el('g', { class: 'g-zones' }));
 
   const lines = el('g', { class: 'pl' });
-  const dot = (cx, cy) => el('circle', { cx, cy, r: 2.4, fill: '#17211F', stroke: 'none', opacity: '.4' });
+  const dot = (cx, cy) => el('circle', { cx, cy, r: 2.4, class: 'pdot' });
   lines.appendChild(el('rect', { x: 20, y: 20, width: 360, height: 580 }));
   lines.appendChild(el('line', { x1: 20, y1: 310, x2: 380, y2: 310 }));
   lines.appendChild(el('circle', { cx: 200, cy: 310, r: 52 }));

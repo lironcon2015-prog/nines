@@ -247,7 +247,19 @@ export function mountBooklet(booklet, formation, startId, onScenario, terms) {
   const go = d => render((idx + d + S.length) % S.length);
   on($('next'), 'click', () => go(1));
   on($('prev'), 'click', () => go(-1));
-  on($('learn'), 'click', () => { toggleLearned(booklet.id, ids[idx]); render(idx); });
+  /* סימון "למדתי" עובר לבד לתרחיש הבא שעוד לא נלמד, אחרי רגע — הלחיצה
+     הבאה של הילד היא ממילא "הבא". ביטול סימון נשאר במקום. */
+  let advance = 0;
+  on($('learn'), 'click', () => {
+    clearTimeout(advance);
+    const was = isLearned(booklet.id, ids[idx]);
+    toggleLearned(booklet.id, ids[idx]);
+    render(idx);
+    if (was || solo) return;
+    const at = idx;
+    const next = ids.findIndex((id, j) => j > at && !isLearned(booklet.id, id));
+    if (next > at) advance = setTimeout(() => { if (idx === at) render(next); }, 450);
+  });
   on($('reset'), 'click', () => { resetBooklet(booklet.id); render(idx); });
 
   /* החלקה: בממשק ימין-לשמאל, החלקה ימינה מקדמת לתרחיש הבא */
@@ -269,6 +281,7 @@ export function mountBooklet(booklet, formation, startId, onScenario, terms) {
   return {
     go,
     destroy() {
+      clearTimeout(advance);
       stopPlaying();
       closeTerm();
       listeners.forEach(([t, type, fn, opts]) => t.removeEventListener(type, fn, opts));

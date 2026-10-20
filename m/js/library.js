@@ -13,9 +13,7 @@ import {
   isLearned, learnedCount, getLast, isMirrored, quizSummary,
   hasMyNumber, getMyNumber, setMyNumber, quizTouched
 } from './store.js';
-import { videoCount } from './videos.js';
 import { savePack, fetchPack, clearPack } from './pack.js';
-import * as cloud from './cloud.js';
 
 const $ = id => document.getElementById(id);
 
@@ -55,7 +53,51 @@ export function renderLibrary(home, booklets, formations, onOpen, onQuiz, onTrai
   renderMeLine(ctx);
   const rest = renderHero(ctx, mine);
   renderRoles(ctx, rest, !single && (!hasMyNumber() || !mine));
-  renderVideos();
+  renderScenarios(ctx, mine);
+  /* הסמל בכותרת: מספר החולצה שלך, כמו הסמל בגבעתיים. בלי מספר — קונוס */
+  const crest = $('lib-crest');
+  if (mine) { crest.textContent = String(heroOf(mine)); crest.classList.add('num'); }
+  else { crest.classList.remove('num'); crest.innerHTML = '<svg class="i"><use href="#i-cone"/></svg>'; }
+}
+
+/* ---------- התרחישים של התפקיד ----------
+   שורה לכל תרחיש, עם ✓ למה שכבר נלמד. לחיצה פותחת את התרחיש עצמו — הילד
+   רואה מה נשאר בלי להיכנס לחוברת ולדפדף. */
+function renderScenarios(ctx, b) {
+  const box = $('scenlist');
+  box.textContent = '';
+  if (!b) return;
+  const flip = t => (ctx.mirrored ? mirrorText(t) : t);
+  const head = document.createElement('div');
+  head.className = 'sec';
+  head.innerHTML = '<svg class="i"><use href="#i-cone"/></svg>';
+  const h = document.createElement('h3');
+  h.textContent = 'התרחישים';
+  const n = document.createElement('span');
+  n.className = 'n num';
+  n.textContent = learnedCount(b.id) + ' מתוך ' + b.scenarios.length;
+  head.append(h, n);
+  box.appendChild(head);
+
+  const list = document.createElement('div');
+  list.className = 'list';
+  b.scenarios.forEach((s, i) => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'lr';
+    row.onclick = () => ctx.onOpen(b.id, s.id);
+    const k = document.createElement('span');
+    const done = isLearned(b.id, s.id);
+    k.className = 'k num' + (done ? ' ok' : '');
+    k.textContent = done ? '✓' : String(i + 1);
+    const name = document.createElement('b');
+    name.textContent = flip(s.chip || s.title);
+    const ph = document.createElement('small');
+    ph.textContent = s.phase;
+    row.append(k, name, ph);
+    list.appendChild(row);
+  });
+  box.appendChild(list);
 }
 
 /* ---------- החבילה המלאה ----------
@@ -219,7 +261,7 @@ function drawChooser(box, { booklets, formations, heroOf, repaint }) {
 
   const key = document.createElement('p');
   key.className = 'ask-key';
-  key.textContent = 'בוורוד — המספרים שכבר יש להם חוברת';
+  key.textContent = 'בזהב — המספרים שכבר יש להם חוברת';
   ask.appendChild(key);
 
   const later = document.createElement('button');
@@ -279,22 +321,35 @@ function titleOf(b, { mirrored }) {
 /* ---------- הכרטיס הגדול ---------- */
 
 function bigCard(b, ctx, tagline) {
-  const { formations, mirrored, heroOf, me, onOpen, onQuiz, onTrain } = ctx;
+  const { formations, mirrored, heroOf, onOpen, onQuiz, onTrain } = ctx;
   const formation = formations[b.formation];
   const hero = heroOf(b);
   const flip = t => (mirrored ? mirrorText(t) : t);
+  const done = learnedCount(b.id);
+  const total = b.scenarios.length;
 
+  /* הכרטיס המוביל של המסך — היחיד שזוהר בזהב (השפה של גבעתיים) */
   const card = document.createElement('div');
-  card.className = 'big';
+  card.className = 'big hero';
 
+  const top = document.createElement('div');
+  top.className = 'big-top';
   const role = document.createElement('div');
-  role.className = 'big-role';
+  role.className = 'eyebrow big-role';
   role.textContent = (tagline || 'התפקיד שלך') + ' · מספר ' + hero;
-  card.appendChild(role);
+  /* טבעת ההתקדמות: כמה מהתרחישים כבר סומנו */
+  const ring = document.createElement('div');
+  ring.className = 'ring';
+  ring.style.setProperty('--p', String(Math.round(done / total * 100)));
+  const rn = document.createElement('span');
+  rn.className = 'num';
+  rn.textContent = done + '/' + total;
+  ring.appendChild(rn);
+  top.append(role, ring);
+  card.appendChild(top);
 
   const head = document.createElement('div');
   head.className = 'big-head';
-
   const thumb = document.createElement('div');
   thumb.className = 'thumb';
   const first = mirrored ? mirrorScenario(b.scenarios[0], formation) : b.scenarios[0];
@@ -303,85 +358,63 @@ function bigCard(b, ctx, tagline) {
 
   const body = document.createElement('div');
   body.className = 'big-body';
-
-  const h3 = document.createElement('h2');
+  const h2 = document.createElement('h2');
   const open = document.createElement('button');
   open.type = 'button';
   open.textContent = titleOf(b, ctx);
   const lastId = getLast(b.id);
   open.onclick = () => onOpen(b.id, lastId);
-  h3.appendChild(open);
-  body.appendChild(h3);
-
+  h2.appendChild(open);
+  body.appendChild(h2);
   const desc = document.createElement('p');
   desc.className = 'big-desc';
   desc.textContent = flip(b.lede);
   body.appendChild(desc);
-
-  const done = learnedCount(b.id);
-  const track = document.createElement('div');
-  track.className = 'track';
-  b.scenarios.forEach(s => {
-    const i = document.createElement('i');
-    if (isLearned(b.id, s.id)) i.className = 'on';
-    track.appendChild(i);
-  });
-  body.appendChild(track);
-
-  const count = document.createElement('div');
-  count.className = 'count';
-  count.textContent = `למדתי ${done} מתוך ${b.scenarios.length}`;
-  body.appendChild(count);
-
   head.appendChild(body);
   card.appendChild(head);
 
-  /* המשך מאיפה שהפסיק — רק אם באמת התחיל ולא סיים */
-  if (lastId && done < b.scenarios.length) {
-    const s = b.scenarios.find(x => x.id === lastId);
-    if (s) {
-      const resume = document.createElement('p');
-      resume.className = 'big-resume';
-      resume.textContent = 'המשך: ' + flip(s.title);
-      resume.onclick = () => onOpen(b.id, lastId);
-      card.appendChild(resume);
-    }
+  /* הפעולה הראשית: להמשיך מהתרחיש הראשון שעוד לא סומן. מי שעוד לא
+     התחיל — מתחילים מהראשון; מי שסיים — למבדק. "המשך מאיפה שעצרתי" לפי
+     מה שלא נלמד ולא לפי האחרון שנפתח: האחרון שנפתח אולי כבר סומן. */
+  const next = b.scenarios.find(s => !isLearned(b.id, s.id));
+  const main = document.createElement('button');
+  main.type = 'button';
+  main.className = 'btn gold learngo';
+  if (!done) {
+    main.textContent = 'להתחיל ללמוד · ' + total + ' תרחישים';
+    main.onclick = () => onOpen(b.id);
+  } else if (next) {
+    main.textContent = 'להמשיך מאיפה שעצרתי';
+    const sm = document.createElement('small');
+    sm.textContent = ' · ' + flip(next.chip || next.title);
+    main.appendChild(sm);
+    main.onclick = () => onOpen(b.id, next.id);
+  } else {
+    main.textContent = 'למדת הכול — למבדק המלא';
+    main.onclick = () => onQuiz(b.id);
   }
+  card.appendChild(main);
 
-  /* הלמידה היא הפעולה הראשית, והיא על כל התרחישים. קודם היא הייתה
-     מוסתרת בשם התפקיד — כותרת שנראית כמו כותרת ומתנהגת ככפתור — וילד
-     שהגיע לכאן ראה רק "אימון · 3 תרחישים" ולא ידע איפה החומר עצמו. */
-  const learn = document.createElement('button');
-  learn.type = 'button';
-  learn.className = 'learngo';
-  learn.textContent = 'למד את כל התרחישים · ' + b.scenarios.length;
-  /* תמיד מהתחלה, ולא מאיפה שהפסיק: "כל התרחישים" חייב לפתוח את הראשון,
-     ואת ההמשך יש שורת "המשך" מעליו. */
-  learn.onclick = () => onOpen(b.id);
-  card.appendChild(learn);
-
-  /* האימון הקצר אחריה: שלוש שאלות בערב אחרי אימון הן משהו שילד באמת
-     חוזר אליו, בניגוד למבדק על חוברת שלמה. */
+  /* האימון הקצר והמבדק — זה לצד זה, מתחת לפעולה הראשית */
+  const row = document.createElement('div');
+  row.className = 'two';
   const train = document.createElement('button');
   train.type = 'button';
-  train.className = 'traingo';
-  train.textContent = quizTouched(b.id)
-    ? 'האימון של היום · 3 תרחישים'
-    : 'אימון קצר · 3 תרחישים';
+  train.className = 'btn traingo';
+  train.textContent = quizTouched(b.id) ? 'האימון של היום' : 'אימון קצר';
+  const t3 = document.createElement('small');
+  t3.textContent = ' · 3';
+  train.appendChild(t3);
   train.onclick = () => onTrain(b.id);
-  card.appendChild(train);
-
-  /* המבדק המלא נשאר, כמהלך של סוף חוברת ולא כברירת מחדל */
   const quiz = document.createElement('button');
   quiz.type = 'button';
-  quiz.className = 'quizgo';
+  quiz.className = 'btn quizgo';
   const q = quizSummary(b.id);
-  quiz.textContent = q.done
-    ? `מבדק מלא · ${q.exact} מדויקים מתוך ${q.done}`
-    : 'מבדק מלא על כל החוברת';
-  quiz.classList.toggle('ready', done === b.scenarios.length);
+  quiz.textContent = q.done ? 'מבדק · ' + q.exact + '/' + q.done : 'מבדק מלא';
+  quiz.classList.toggle('ready', done === total);
   quiz.onclick = () => onQuiz(b.id);
-  card.appendChild(quiz);
+  row.append(train, quiz);
+  card.appendChild(row);
 
   return card;
 }
@@ -454,17 +487,4 @@ function renderRoles(ctx, list, openByDefault) {
 
     box.appendChild(row);
   });
-}
-
-/* ---------- ספריית הסרטונים ---------- */
-
-function renderVideos() {
-  const n = videoCount();
-  $('videosn').textContent = n ? ' · ' + n : '';
-  /* כשהספרייה משותפת שווה לומר את זה כאן, כי זה משנה מה יימצא בפנים */
-  const tag = $('videostag');
-  if (cloud.isViewer()) tag.textContent = 'משותפת · צפייה';
-  else if (cloud.isOwner()) tag.textContent = 'משותפת';
-  else tag.textContent = '';
-  tag.hidden = !tag.textContent;
 }
