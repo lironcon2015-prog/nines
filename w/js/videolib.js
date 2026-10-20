@@ -9,7 +9,7 @@
 
 import {
   listCategories, addCategory, renameCategory, removeCategory, countByCategory,
-  listVideos, addVideo, updateVideo, removeVideo, categoryName,
+  listVideos, getVideo, addVideo, updateVideo, removeVideo, categoryName,
   platformName, embedUrl, embedBlocked, isPortrait, playable, mediaFresh,
   posterCandidates, needsPoster, needsDownload, needsUpload, thumbUrl, normalizeUrl, videoCount,
   readOnly, exportDoc, applyRemote, reload
@@ -44,6 +44,9 @@ const redownloaded = new Set();
 /* מצב הסנכרון האחרון, למה שמוצג בפס העליון */
 let syncState = { busy: false, at: 0, error: '', note: '' };
 
+/* הציור של המסך הפתוח — להעלאה שמסתיימת ברקע, אחרי שהטופס כבר נסגר */
+let paintNow = () => {};
+
 /** תאריך קצר — "היום", "אתמול", ואחר כך תאריך */
 function whenText(ms) {
   const day = 24 * 60 * 60 * 1000;
@@ -65,6 +68,26 @@ function agoText(ms) {
 }
 
 /* --- טופס ההוספה --- */
+
+/* השם והתמונה נמשכים ברגע שהקישור נכנס לשדה, ולא רק בלחיצה על "הוסף":
+   הבקשה רצה בזמן שבוחרים כותרת וכותבים הערה, ובשמירה היא כבר גמורה.
+   כך זה בספריית המתכונים, ושם ההוספה הרגישה מיידית. */
+let early = null;   // {url, promise} — הבקשה לקישור שבשדה עכשיו
+
+function startLookup() {
+  if (!$('v-auto').checked) return;
+  const clean = normalizeUrl($('v-url').value);
+  if (!clean || (early && early.url === clean)) return;
+  if (editing) {
+    const was = getVideo(editing);
+    if (was && was.url === clean) return;
+  }
+  const promise = lookup(clean);
+  early = { url: clean, promise };
+  promise.then(got => {
+    if (early && early.url === clean && got.title && !$('v-title').value.trim()) $('v-title').value = got.title;
+  });
+}
 
 function fillCategorySelect(select, selected) {
   select.textContent = '';
@@ -95,6 +118,7 @@ function setError(msg) {
 }
 
 function resetForm() {
+  early = null;
   $('v-url').value = '';
   $('v-title').value = '';
   $('v-note').value = '';
@@ -126,6 +150,7 @@ function openForm(values, video) {
   } else if (values) {
     if (values.url) $('v-url').value = values.url;
     if (values.title) $('v-title').value = values.title;
+    startLookup();
   }
   setError('');
 }
@@ -707,44 +732,55 @@ async function loadPosterUrls() {
   return saved;
 }
 
-/** מביאה תמונה, מקטינה ושומרת. מחזירה true אם באמת נשמרה. */
+/** מביאה תמונה, מקטינה ושומרת. מחזירה true אם באמת נשמרה.
+
+    הטלפון והסקריפט מביאים אותה **ביחד**, והראשון שמצליח קובע. פעם הסקריפט
+    ניסה לבד ראשון — Apps Script מתעורר לאט, ואינסטגרם חוסמת שרתים, כך
+    שהרבה פעמים חיכינו לו כדי לגלות שנכשל, ורק אז הטלפון התחיל. מה שהטלפון
+    הביא עולה לתיקייה **ברקע** (cloudCopy): הכרטיס לא מחכה להעלאה, ובלי
+    ההעלאה הצד השני היה רואה כרטיס ריק. */
 async function savePoster(id, src, log) {
   if (!src) return false;
-  /* כשיש סקריפט, הוא מושך את התמונה ושומר אותה בתיקייה באותה פנייה —
-     ואז גם המכשיר השני יקבל אותה בלי לפנות לאינסטגרם בעצמו. */
-  if (cloud.isOn() && !cloud.isViewer()) {
-    try {
-      const got = await cloud.grabPoster(id, src);
-      if (got && got.blob) {
-        const small = await posters.shrink(got.blob);
-        if (small && await posters.put(id, small)) {
-          updateVideo(id, { posterKind: 'blob', posterUrl: src, posterRef: got.ref });
-          return true;
-        }
-      }
-    } catch (e) {
-      if (log) log.push('תמונה · הסקריפט שלך נכשל');
-    }
-  }
-  const blob = await fetchPoster(src, log);
-  const small = blob ? await posters.shrink(blob) : null;
+  const owner = cloud.isOn() && !cloud.isViewer();
+  const byScript = owner
+    ? cloud.grabPoster(id, src).catch(() => { if (log) log.push('תמונה · הסקריפט שלך נכשל'); return null; })
+    : Promise.resolve(null);
+  const byPhone = fetchPoster(src, log);
+  const got = await firstOf([
+    byPhone.then(blob => (blob ? { blob, ref: null } : null)),
+    byScript.then(g => (g && g.blob ? { blob: g.blob, ref: g.ref || null } : null))
+  ]);
+  const small = got ? await posters.shrink(got.blob) : null;
   if (small && await posters.put(id, small)) {
-    /* הטלפון הצליח במקום שהסקריפט נכשל — וזה קורה, כי אינסטגרם חוסמת
-       שרתים ולא דפדפנים. התמונה חייבת לעלות לתיקייה כאן ועכשיו: בלי זה
-       היא נשארת על המכשיר הזה בלבד, הצד השני רואה כרטיס ריק, ואין שום
-       סימן לכך שמשהו חסר. */
-    let ref = null;
-    if (cloud.isOn() && !cloud.isViewer()) {
-      try { ref = await cloud.putPoster(id, small); } catch (e) { /* תעלה בהשלמה הבאה */ }
-    }
-    if (!readOnly()) updateVideo(id, { posterKind: 'blob', posterUrl: src, posterRef: ref || undefined });
+    if (!readOnly()) updateVideo(id, { posterKind: 'blob', posterUrl: src, posterRef: got.ref || undefined });
+    if (owner && !got.ref) cloudCopy(id, byScript, small);
     return true;
   }
   /* גם כשלא הצלחנו לשמור — הכתובת נשמרת, כי היא עדיין שווה ניסיון הצגה
-     אחד. מה שהיא לא, זה תחליף לתמונה שמורה: posterKind נשאר ריק, והכרטיס
-     יחזור לתור בפתיחה הבאה. */
+     אחד. posterKind נשאר ריק, והכרטיס יחזור לתור בפתיחה הבאה. */
   if (!readOnly()) updateVideo(id, { posterUrl: src });
   return false;
+}
+
+/** הראשון שמחזיר משהו, או null כשכולם החזירו null */
+function firstOf(list) {
+  return new Promise(resolve => {
+    let left = list.length;
+    list.forEach(p => p.then(value => {
+      if (value) resolve(value);
+      else if (!--left) resolve(null);
+    }));
+  });
+}
+
+/* העותק בתיקייה, אחרי שהכרטיס כבר מוצג. אם הסקריפט הביא בעצמו — המזהה
+   שלו; אחרת מעלים את מה שהטלפון הביא. נכשל? needsUpload יעלה בפתיחה הבאה. */
+async function cloudCopy(id, byScript, blob) {
+  try {
+    const g = await byScript;
+    const ref = (g && g.ref) || await cloud.putPoster(id, blob);
+    if (ref && !readOnly()) { updateVideo(id, { posterRef: ref }); syncNow(paintNow); }
+  } catch (e) { /* יעלה בהשלמה הבאה */ }
 }
 
 /* השלמת תמונות חסרות, בשקט וברקע.
@@ -891,12 +927,15 @@ export function mountVideos(prefill) {
   const onPaste = async () => {
     try {
       const text = await navigator.clipboard.readText();
-      if (text) { $('v-url').value = text.trim(); setError(''); }
+      if (text) { $('v-url').value = text.trim(); setError(''); startLookup(); }
     } catch (e) {
       setError('הדפדפן לא נתן גישה ללוח. אפשר להדביק ידנית בשדה.');
     }
   };
   $('v-paste').addEventListener('click', onPaste);
+  const onUrlPaste = () => setTimeout(startLookup, 0);
+  $('v-url').addEventListener('change', startLookup);
+  $('v-url').addEventListener('paste', onUrlPaste);
 
   const onSubmit = async e => {
     e.preventDefault();
@@ -923,11 +962,14 @@ export function mountVideos(prefill) {
        שנייה-שתיים שהמשתמש רואה. */
     let log = [];
     let image = null;
-    if ($('v-auto').checked) {
+    /* עריכה בלי שינוי בקישור אינה צריכה רשת בכלל */
+    const clean = normalizeUrl(url);
+    const was = editing ? getVideo(editing) : null;
+    if ($('v-auto').checked && !(was && was.url === clean)) {
       const label = $('v-save').textContent;
       $('v-save').disabled = true;
       $('v-save').textContent = 'מביא תמונה ושם…';
-      const got = await lookup(normalizeUrl(url));
+      const got = await (early && early.url === clean ? early.promise : lookup(clean));
       log = got.log;
       image = got.image;
       if (got.full) fields.full = got.full;
@@ -1003,6 +1045,7 @@ export function mountVideos(prefill) {
   };
   document.addEventListener('visibilitychange', onVisible);
 
+  paintNow = repaint;
   repaint();
   loadPosterUrls().then(repaint);
   if (cloud.isOn()) syncNow(repaint).then(() => backfillPosters(repaint));
@@ -1021,6 +1064,9 @@ export function mountVideos(prefill) {
     destroy() {
       $('v-cat').removeEventListener('change', onCatChange);
       $('v-paste').removeEventListener('click', onPaste);
+      $('v-url').removeEventListener('change', startLookup);
+      $('v-url').removeEventListener('paste', onUrlPaste);
+      paintNow = () => {};
       $('v-formel').removeEventListener('submit', onSubmit);
       $('v-cancel').removeEventListener('click', onCancel);
       $('v-check').removeEventListener('click', onCheck);

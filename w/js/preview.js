@@ -95,30 +95,30 @@ export async function lookup(url) {
   const playable = () => out.media || embedUrl(url) || (out.full && embedUrl(out.full));
   const enough = () => out.title && out.image && playable();
 
-  /* הסקריפט שלך קודם. הוא היחיד שאינו מוגבל בבקשות ואינו נופל לסירוגין,
-     ולכן כשהוא מצליח אין שום סיבה להעיר אף אחד אחר. */
-  if (cloud.isOn()) {
-    try {
-      const got = await cloud.preview(url);
-      take(got, url, out);
-      out.log.push('הסקריפט שלך: ' + found(out));
-    } catch (e) {
-      out.log.push('הסקריפט שלך: ' + reason(e));
-    }
-    if (enough()) return out;
-  }
+  /* הסקריפט והספק הראשון יוצאים **ביחד**, וחוזרים ברגע שיש מספיק — ממי
+     שענה ראשון. פעם הסקריפט יצא לבד ראשון: Apps Script מתעורר לאט (עד
+     עשרים שניות), ואינסטגרם חוסמת שרתים ולכן הוא החזיר הרבה פעמים חצי
+     תשובה — ורק אחרי כל ההמתנה הזאת נשלח הספק שהיה עונה בשנייה. ספריית
+     המתכונים בלי סקריפט הייתה מהירה פי כמה מ-nines עם סקריפט, באותו קוד.
+     המחיר: microlink נשאל גם כשיש סקריפט, ויש לו מכסה יומית — הסקריפט
+     נשאר לצידו, כך שגם כשהמכסה נגמרת לא הפסדנו כלום. */
+  let done = false;
+  const deadline = new Promise(resolve => setTimeout(() => {
+    if (!done) out.log.push('נגמר הזמן');
+    resolve();
+  }, BUDGET));
+  const pending = [];
+  if (cloud.isOn()) pending.push(viaScript(url, out));
+  pending.push(visit(PROVIDERS[0], url, out));
+  await Promise.race([until(pending, enough), deadline]);
 
-  /* הספק הראשון לבדו, כי בדרך כלל הוא מספיק — ואז יצאה בקשה אחת בלבד.
-     רק אם הוא לא סגר את העניין, נשלחים השאר, וביחד ולא בזה אחר זה:
-     בטור, שני ספקים תקועים אכלו שש-עשרה שניות לפני שהשלישי בכלל התחיל. */
-  await visit(PROVIDERS[0], url, out);
+  /* לא הספיק — שאר הספקים, ביחד ולא בזה אחר זה: בטור, שני ספקים תקועים
+     אכלו שש-עשרה שניות לפני שהשלישי בכלל התחיל */
   if (!enough()) {
-    const rest = PROVIDERS.slice(1).map(p => visit(p, url, out));
-    await Promise.race([
-      Promise.all(rest),
-      new Promise(resolve => setTimeout(() => { out.log.push('נגמר הזמן'); resolve(); }, BUDGET))
-    ]);
+    pending.push(...PROVIDERS.slice(1).map(p => visit(p, url, out)));
+    await Promise.race([until(pending, enough), deadline]);
   }
+  done = true;
   return out;
 }
 
@@ -126,6 +126,27 @@ export async function lookup(url) {
 export async function refreshMedia(url) {
   const found = await lookup(url);
   return { media: found.media, full: found.full, log: found.log };
+}
+
+async function viaScript(url, out) {
+  try {
+    take(await cloud.preview(url), url, out);
+    out.log.push('הסקריפט שלך: ' + found(out));
+  } catch (e) {
+    out.log.push('הסקריפט שלך: ' + reason(e));
+  }
+}
+
+/* נגמר כשיש מספיק, או כשכולם ענו. visit ו-viaScript לעולם לא נדחים. */
+function until(list, enough) {
+  return new Promise(resolve => {
+    let left = list.length;
+    if (!left || enough()) { resolve(); return; }
+    list.forEach(p => p.then(() => {
+      left--;
+      if (enough() || !left) resolve();
+    }));
+  });
 }
 
 async function visit(provider, url, out) {
