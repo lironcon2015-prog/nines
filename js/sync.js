@@ -81,8 +81,9 @@ function field(label, attrs) {
   return { wrap: el('label.field', null, el('span', { text: label }), input), input };
 }
 
-/** prefill: {url, code} מקישור הצטרפות, או null */
-export function mountSync(root, prefill) {
+/** prefill: {url, code} מקישור הצטרפות, או null. extra(root): עוד אזורים
+    בסוף המסך — בתשיעיות, החבילה. */
+export function mountSync(root, prefill, extra) {
   document.title = 'הגדרות — תשיעיות';
   const paint = () => {
     root.textContent = '';
@@ -93,6 +94,7 @@ export function mountSync(root, prefill) {
     else drawSetup(root, paint);
     if (!prefill) drawLook(root);
     if (!cloud.isViewer() && !prefill) drawPrefs(root);
+    if (!prefill && extra) extra(root);
   };
   paint();
   const off = onSync(() => { if (!root.hidden && cloud.isOn()) paint(); });

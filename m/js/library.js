@@ -107,7 +107,9 @@ function renderScenarios(ctx, b) {
 
 function renderPack(pack) {
   const box = $('pack');
-  if (!pack || (!pack.gated && !pack.loaded)) { box.hidden = true; return; }
+  /* בבית רק כשאין חבילה בכלל — אז זה כל המסך. אחרי שנטענה, ההחלפה וההסרה
+     עוברות להגדרות (packui.js), יחד עם ההודעה כשעדכון לא ירד. */
+  if (!pack || !pack.gated || pack.loaded) { box.hidden = true; return; }
 
   /* החבילה שבמכשיר מול מה שהאתר מכריז. העדכון יורד לבד בפתיחה, ולכן
      אם ההפרש עדיין כאן — ההורדה נכשלה (אין רשת, או שהאתר לא מגיע).

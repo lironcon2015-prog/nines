@@ -563,6 +563,10 @@ input[type="checkbox"]:checked::after { inset-inline-start: 21px; background: va
 .acts { display: flex; gap: .5rem; }
 .acts .btn { flex: 1; min-width: 0; }
 .acts .btn.icon { flex: none; width: 46px; padding: 0; }
+.fixposter { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; font-size: .86rem; color: var(--muted); }
+.fixposter > span { flex: 1; min-width: 12ch; }
+.fixposter .btn.sm { width: auto; }
+.fixposter details { flex-basis: 100%; }
 .confirm { display: flex; flex-direction: column; gap: .5rem; padding: .7rem; border-radius: 14px; background: var(--well); border: 1px solid var(--line); font-size: .88rem; }
 .confirm .row > .btn { width: auto; }
 

@@ -120,7 +120,13 @@ async function call(op, payload, target) {
        של פריסה שכבר לא קיימת. עדיף לומר את זה מאשר "לא הצלחנו". */
     throw new Error('הכתובת לא החזירה תשובה תקינה. ודא שהיא מסתיימת ב-/exec ושהפריסה עדיין קיימת.');
   }
-  if (!json || json.ok !== true) throw new Error((json && json.error) || 'הבקשה נדחתה');
+  /* refused: הסקריפט ענה, וסירב לבקשה הזאת (קובץ שנמחק מהתיקייה, תמונה שלא
+     נמשכה). שונה מתקלת רשת: אין טעם לעצור בגללו את כל השאר. */
+  if (!json || json.ok !== true) {
+    const err = new Error((json && json.error) || 'הבקשה נדחתה');
+    err.refused = true;
+    throw err;
+  }
   return json;
 }
 

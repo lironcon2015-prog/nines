@@ -7,6 +7,7 @@ import { mountQuiz, buildQuestions } from './quiz.js';
 import { mountLibrary } from './videolib.js';
 import { mountCategories } from './vcats.js';
 import { mountSync } from './sync.js';
+import { drawPack } from './packui.js';
 import { migrate } from './videos.js';
 import * as cloud from './cloud.js';
 import { afterLayers } from './ui.js';
@@ -204,7 +205,7 @@ async function boot() {
       /* גם כאן פעם אחת: אחרי ההצטרפות רענון לא אמור לשאול שוב */
       const invite = route.join ? cloud.decodeJoin(route.join) : joining;
       joining = null;
-      current = mountSync($('share'), invite);
+      current = mountSync($('share'), invite, root => drawPack(root, pack));
       window.scrollTo(0, 0);
       return;
     }

@@ -70,9 +70,12 @@ function shown() {
 function posterEl(v) {
   const box = el('div.pv');
   const sources = posterCandidates(v, posterUrls.get(v.id));
+  /* במקום התמונה בלבד — שם הפלטפורמה וכפתור הניגון נשארים. פעם הכרטיס
+     כולו התרוקן, ואי אפשר היה לדעת מאיפה הסרטון שאין לו תמונה. */
   const placeholder = () => {
-    box.textContent = '';
-    box.appendChild(el('div.ph', { text: (v.title || '?').trim().charAt(0) }));
+    const ph = el('div.ph', { text: (v.title || '?').trim().charAt(0) });
+    const old = box.querySelector('img');
+    if (old) old.replaceWith(ph); else box.prepend(ph);
   };
   if (!sources.length) { placeholder(); return box; }
   const img = el('img', { alt: '', loading: 'lazy', decoding: 'async' });
@@ -539,6 +542,7 @@ function buildPlayer(id) {
   tags.append(name + ' · נשמר ' + whenText(v.at));
   bottom.appendChild(tags);
   if (v.note) bottom.appendChild(el('p.note', { text: v.note }));
+  if (!readOnly() && !posterUrls.has(v.id)) bottom.appendChild(fixPoster(v, () => { if (!stage.querySelector('video, iframe')) cover(); }));
   const acts = el('div.acts', null, openOut);
   if (!readOnly()) {
     const edit = el('button.btn.icon', { type: 'button', 'aria-label': 'עריכה', onclick: () => { close(); openEditor(null, getVideo(v.id)); } }, icon('pen'));
@@ -561,6 +565,42 @@ function buildPlayer(id) {
   layer.append(el('div.player-top', null, el('b', { text: v.title }), shut), stage, bottom);
   document.body.appendChild(layer);
   shut.focus();
+}
+
+/* תמונה שלא נשמרה: חיפוש מחדש ביד, מתוך הנגן. ההשלמה ברקע מנסה לבד בכל
+   פתיחה, אבל בשקט — כאן רואים מה כל שירות ענה ("מה קרה?"), וזו הדרך היחידה
+   לדעת למה סרטון מסוים נשאר בלי תמונה. */
+function fixPoster(v, after) {
+  const line = el('div.fixposter', null, el('span', { text: 'לסרטון הזה אין תמונה שמורה.' }));
+  const go = el('button.btn.sm', { type: 'button' }, icon('sync'), 'להביא שוב');
+  go.onclick = async () => {
+    go.disabled = true;
+    go.textContent = 'מחפש…';
+    const old = line.querySelector('details');
+    if (old) old.remove();
+    const got = await lookup(v.url);
+    const log = got.log;
+    if (got.full && !v.full) updateVideo(v.id, { full: got.full });
+    if (got.media) updateVideo(v.id, { media: got.media });
+    let ok = false;
+    for (const src of [...new Set([got.image, thumbUrl(v.full || v.url), v.posterUrl].filter(Boolean))]) {
+      if (await savePoster(v.id, src, log)) { ok = true; break; }
+    }
+    if (ok) {
+      await loadPosterUrls();
+      paint();
+      line.replaceWith(el('p.hint', { text: 'התמונה נשמרה.' }));
+      after();
+      syncNow();
+      return;
+    }
+    go.disabled = false;
+    go.textContent = 'נסה שוב';
+    line.firstChild.textContent = got.image ? 'נמצאה תמונה, אבל לא הצלחנו לשמור אותה.' : 'לא נמצאה תמונה לקישור הזה.';
+    line.appendChild(report(log));
+  };
+  line.appendChild(go);
+  return line;
 }
 
 /* --- התמונות ---
@@ -644,7 +684,16 @@ async function backfillPosters() {
           const blob = await cloud.getPoster(v.posterRef);
           const small = blob ? (await posters.shrink(blob)) || blob : null;
           if (small && await posters.put(v.id, small)) { changed = true; saved.add(v.id); }
-        } catch (e) { break; }
+        } catch (e) {
+          /* הסקריפט סירב — הקובץ כבר לא בתיקייה. פעם זה עצר את כל ההורדות
+             (break), ותמונה אחת שנמחקה השאירה את כל מה שאחריה בלי תמונה לתמיד.
+             עכשיו: ממשיכים, ואצל הבעלים המזהה המת נמחק כדי שהתמונה תימשך מחדש. */
+          if (e && e.refused) {
+            if (!readOnly()) { updateVideo(v.id, { posterRef: null }); changed = true; }
+            continue;
+          }
+          break;   /* הסקריפט לא עונה — אין טעם להמשיך */
+        }
       }
     }
 
