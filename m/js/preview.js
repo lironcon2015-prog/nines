@@ -22,10 +22,10 @@ const BUDGET = 15000;
 /* AbortSignal.timeout קיים רק מ-Safari 16, ובאייפון ישן יותר הוא זורק
    מיד — כלומר כל הספקים נכשלים בבת אחת עוד לפני שיצאה בקשה אחת.
    AbortController קיים מאז ומתמיד, ולכן הפסק הזמן נבנה ידנית. */
-function withTimeout(url, ms) {
+function withTimeout(url, ms, init) {
   const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
   const timer = setTimeout(() => { if (ctrl) ctrl.abort(); }, ms || TIMEOUT);
-  const options = ctrl ? { signal: ctrl.signal } : {};
+  const options = Object.assign({}, init, ctrl ? { signal: ctrl.signal } : {});
   return fetch(url, options).finally(() => clearTimeout(timer));
 }
 
@@ -86,14 +86,19 @@ export function needsResolve(url) {
 }
 
 /** מה שידוע על הקישור. השדות שלא נמצאו חוזרים null, והשאר עדיין שימושי. */
-export async function lookup(url) {
+export async function lookup(url, opts) {
+  const wantMedia = !!(opts && opts.media);
   const out = { full: null, title: null, image: thumbUrl(url), media: null, log: [] };
   /* מתי אפשר להפסיק: יש שם, יש תמונה, ויש **דרך אחת** לנגן — הקובץ
      עצמו, או נגן משובץ שכבר עכשיו אפשר לבנות מהכתובת. קישור יוטיוב
      נסגר כך אחרי בקשה אחת: אין לו og:video, ואין שום טעם להעיר בגללו
      עוד שלושה שירותים ולהמתין להם. */
   const playable = () => out.media || embedUrl(url) || (out.full && embedUrl(out.full));
-  const enough = () => out.title && out.image && playable();
+  /* לפני ניגון רק הקובץ נחשב. בלי זה, באינסטגרם — שתמיד יש לה נגן
+     משובץ — החיפוש נעצר אחרי שם ותמונה מהספק הראשון, ואף ספק אחר לא
+     נשאל על הקובץ. הנגן המשובץ שלהם לרוב לא מנגן ("Watch on Instagram")
+     ושולח לאינסטגרם — בדיוק מה שבעל הריפו נתקל בו. */
+  const enough = wantMedia ? () => !!out.media : () => out.title && out.image && playable();
 
   /* הסקריפט והספק הראשון יוצאים **ביחד**, וחוזרים ברגע שיש מספיק — ממי
      שענה ראשון. פעם הסקריפט יצא לבד ראשון: Apps Script מתעורר לאט (עד
@@ -109,12 +114,13 @@ export async function lookup(url) {
   }, BUDGET));
   const pending = [];
   if (cloud.isOn()) pending.push(viaScript(url, out));
-  pending.push(visit(PROVIDERS[0], url, out));
+  /* הקובץ — כולם מיד: מישהו לחץ ▶ ומחכה, ואין טעם לחכות לראשון */
+  pending.push(...(wantMedia ? PROVIDERS : PROVIDERS.slice(0, 1)).map(p => visit(p, url, out)));
   await Promise.race([until(pending, enough), deadline]);
 
   /* לא הספיק — שאר הספקים, ביחד ולא בזה אחר זה: בטור, שני ספקים תקועים
      אכלו שש-עשרה שניות לפני שהשלישי בכלל התחיל */
-  if (!enough()) {
+  if (!enough() && !wantMedia) {
     pending.push(...PROVIDERS.slice(1).map(p => visit(p, url, out)));
     await Promise.race([until(pending, enough), deadline]);
   }
@@ -122,10 +128,62 @@ export async function lookup(url) {
   return out;
 }
 
-/** רק הקובץ, לרענון לפני ניגון — כתובת של קובץ בפייסבוק פגה אחרי שעות */
+/** רק הקובץ, לרענון לפני ניגון — כתובת של קובץ בפייסבוק פגה אחרי שעות.
+    blocked: אינסטגרם לא מרשה לנגן את הסרטון מחוץ לה (ראה igMedia). */
 export async function refreshMedia(url) {
-  const found = await lookup(url);
-  return { media: found.media, full: found.full, log: found.log };
+  if (detectPlatform(url).id === 'instagram') {
+    const ig = await igMedia(url);
+    /* לא ענה — אין מה לחפש אצל השאר: og:video לא קיים באינסטגרם */
+    return { media: ig.media, blocked: ig.blocked, full: null, log: ig.log };
+  }
+  const found = await lookup(url, { media: true });
+  return { media: found.media, blocked: false, full: found.full, log: found.log };
+}
+
+/* --- אינסטגרם: הקובץ מהנגן המשובץ ---
+   בדף של הרילס אין og:video, ולכן אף ספק לא מצא קובץ באינסטגרם (נבדק מול
+   רילסים אמיתיים, אוקטובר 2026). הקובץ נמצא בנגן המשובץ — הדף שאינסטגרם
+   עצמה מגישה לשיבוץ באתרים — בתוך contextJSON:
+     gql_data.shortcode_media.video_url (בקרוסלה — בפריטים שבתוכה)
+   כשאינסטגרם לא מרשה לנגן מחוץ לה (זכויות, כמעט תמיד על המוזיקה), אין שם
+   קובץ, ו-context.copyright_blocked=true; הנגן שלה מראה אז "Watch on
+   Instagram" ושולח אליה. את זה לא עוקפים — רק יודעים מראש ואומרים.
+
+   jina מחזיר את הדף כמו שהוא (X-Return-Format: html) ומתיר את הכותרת הזו
+   מהמקור שלנו, בשנייה. allorigins ו-codetabs נפלו באותה בדיקה (522). */
+async function igMedia(url) {
+  const out = { media: null, blocked: false, log: [] };
+  let id = null;
+  try { const m = new URL(url).pathname.match(/\/(?:p|reels?|tv)\/([^/?#]+)/); id = m && m[1]; } catch (e) { /* כתובת פגומה */ }
+  if (!id) { out.log.push('אינסטגרם: אין מזהה בכתובת'); return out; }
+  const page = 'https://www.instagram.com/p/' + encodeURIComponent(id) + '/embed/captioned/';
+  try {
+    const res = await withTimeout('https://r.jina.ai/' + page, TIMEOUT, { headers: { 'X-Return-Format': 'html' } });
+    if (!res.ok) { out.log.push('jina: ' + res.status); return out; }
+    const data = embedData(await res.text());
+    if (!data) { out.log.push('jina: בלי נתוני הנגן'); return out; }
+    const media = data.gql_data && data.gql_data.shortcode_media;
+    const file = media && (media.video_url || firstChildVideo(media));
+    if (file && /^https:\/\//.test(file)) out.media = file;
+    out.blocked = !out.media && !!(data.context && data.context.copyright_blocked);
+    out.log.push('jina: ' + (out.media ? 'קובץ' : out.blocked ? 'חסום מחוץ לאינסטגרם' : 'בלי קובץ'));
+  } catch (e) {
+    out.log.push('jina: ' + reason(e));
+  }
+  return out;
+}
+
+/* "contextJSON":"{\"context\":…}" — מחרוזת JSON בתוך מחרוזת JSON */
+function embedData(html) {
+  const m = html.match(/"contextJSON":"((?:\\.|[^"\\])*)"/);
+  if (!m) return null;
+  try { return JSON.parse(JSON.parse('"' + m[1] + '"')); } catch (e) { return null; }
+}
+
+function firstChildVideo(media) {
+  const kids = (media.edge_sidecar_to_children && media.edge_sidecar_to_children.edges) || [];
+  const hit = kids.find(k => k && k.node && k.node.video_url);
+  return hit ? hit.node.video_url : null;
 }
 
 async function viaScript(url, out) {
