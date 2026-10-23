@@ -11,7 +11,7 @@
 import {
   listCategories, addCategory, countByCategory, categoryName,
   listVideos, addVideo, updateVideo, removeVideo, getVideo, videoCount,
-  platformName, detectPlatform, embedUrl, embedBlocked, isPortrait, playable, mediaFresh,
+  platformName, detectPlatform, embedUrl, isPortrait, playable, mediaFresh,
   posterCandidates, needsPoster, needsDownload, needsUpload, thumbUrl, normalizeUrl,
   readOnly, reload
 } from './videos.js';
@@ -19,7 +19,7 @@ import { needsResolve, lookup, refreshMedia, fetchPoster } from './preview.js';
 import * as cloud from './cloud.js';
 import * as posters from './posters.js';
 import { state as sync, syncNow, onSync, autoOn } from './sync.js';
-import { $, el, icon, toast, whenText, agoText, sheet, openLayer, onEscape, afterLayers, confirmBox, readClipboard } from './ui.js';
+import { $, el, icon, toast, whenText, agoText, sheet, openLayer, onEscape, afterLayers, readClipboard } from './ui.js';
 
 /* פלטפורמות שהדף שלהן מצהיר על קובץ וידאו או ניתן לשיבוץ */
 const FETCHABLE = new Set(['facebook', 'instagram', 'tiktok', 'youtube', 'x', 'vimeo']);
@@ -439,8 +439,27 @@ function buildEditor(prefill, video) {
 }
 
 /* --- הנגן ---
-   שכבה מעל הדף ולא חלק מהכרטיס (nines: גלילה של נגן בתוך כרטיס למרכז
-   נכשלה שוב ושוב). הנגן ממלא את מה שנשאר בין הכותרת לפרטים. */
+   אותו נגן כמו בספריית המתכונים (Recipes/js/player.js), בלי המתכון: הסרטון
+   הוא המסך, מקצה לקצה, וכל השאר צף עליו — ✕ ⛶ למעלה, הקטגוריה, השם וההערה
+   למטה על הצללה, והפעולות בעמודה בצד; מחיקה רק מאחורי ⋯.
+
+   · באינסטגרם, בפייסבוק ובטיקטוק מנגנים את קובץ הווידאו עצמו — הנגן המשובץ
+     שלהם הוא דף שלם, עם כותרת, לייקים ותגובות. כשאין קובץ — הנגן שלהם,
+     חתוך לחלון של הסרטון. יוטיוב, וימאו ודרייב — הנגן המשובץ, הוא נקי.
+   · רילס שאינסטגרם חוסמת מחוץ לה (זכויות, כמעט תמיד על המוזיקה): אין קובץ,
+     והנגן שלה רק שולח אליה בלחיצה. לכן במקומו — התמונה, הסבר, ו"פתיחה
+     באינסטגרם" כבחירה. הבדיקה ב-preview.js (igMedia).
+   · בקובץ שלנו, כמו ביוטיוב: נגיעה מראה את הפקדים והסרטון ממשיך — 10 שניות
+     אחורה וקדימה, עצירה, והקו בתחתית נגרר. נגיעה כפולה בצד ימין — 10
+     קדימה, בשמאל — 10 אחורה. לחיצה ארוכה — מהירות כפולה. הזמן משמאל
+     לימין, כמו בכל נגן.
+
+   מה שנשאר מהנגן הקודם: הנגינה מתחילה רק ב-▶ (כך גם הקול מותר), ובלי
+   "הבאה אוטומטית" (autoOn כבוי) הקישור לא יוצא לשום שירות — רק הנגן
+   המשובץ. */
+
+/* הנגן המשובץ של אלה הוא דף שלם — מנגנים אצלם רק את הקובץ */
+const CHROME = new Set(['instagram', 'facebook', 'tiktok']);
 
 function openPlayer(id) {
   afterLayers(() => buildPlayer(id));
@@ -449,147 +468,479 @@ function openPlayer(id) {
 function buildPlayer(id) {
   const v = getVideo(id);
   if (!v) return;
-  const embed = embedUrl(playable(v));
-  const canFetch = autoOn() && FETCHABLE.has(v.platform);
   const name = platformName(v.platform);
+  const owner = !readOnly();
+  let fallback = embedUrl(playable(v));
+  const embed = CHROME.has(v.platform) ? null : fallback;
+  const canFetch = autoOn() && FETCHABLE.has(v.platform);
 
   const layer = el('div.player', { role: 'dialog', 'aria-modal': 'true', 'aria-label': v.title });
-  const shut = el('button.icon-btn', { type: 'button', 'aria-label': 'סגירה' }, icon('x'));
   const stage = el('div.stage');
+  const still = posterCandidates(v, posterUrls.get(v.id))[0];
+
+  /* שורת המערכת למעלה בצבע של הנגן, ולא בצבע הדף מעל סרטון שחור */
+  const meta = document.querySelector('meta[name="theme-color"]');
+  const tone = meta && meta.content;
+  if (meta) meta.content = '#000000';
+
   let offKey = null;
+  let video = null;
   const close = openLayer(() => {
     if (offKey) offKey();
-    /* עצירה מפורשת: אלמנט שנמחק ממשיך לפעמים להשמיע */
-    const media = layer.querySelector('video');
-    if (media) { media.pause(); media.removeAttribute('src'); media.load(); }
+    if (meta) meta.content = tone;
+    if (fsEl()) leaveFull();
+    /* עצירה מפורשת: אלמנט שנמחק ממשיך לפעמים להשמיע. null — כדי שרענון של
+       קובץ שעוד בדרך לא ינגן ברקע אחרי הסגירה */
+    if (video) { video.pause(); video.removeAttribute('src'); video.load(); video = null; }
     layer.remove();
   });
-  shut.onclick = close;
-  offKey = onEscape(close);
 
-  const openOut = el('a.btn', { href: v.url, target: '_blank', rel: 'noopener noreferrer' }, icon('ext'), 'פתיחה ב' + name);
-
-  const msg = text => {
-    const m = el('p.msg', null, text + ' ');
-    m.appendChild(el('a', { href: v.url, target: '_blank', rel: 'noopener noreferrer', text: 'פתיחה ב' + name }));
-    return m;
+  /* --- מה מנגנים ---
+     file: קובץ הווידאו · embed: הנגן המשובץ · out: אין קובץ ואין נגן
+     · blocked: אינסטגרם לא מרשה לנגן מחוץ לה · null: עוד לא ידוע */
+  let mode = v.media && mediaFresh(v) ? 'file' : (embed ? 'embed' : null);
+  let pending = null;
+  const resolve = () => {
+    if (mode || pending) return pending;
+    if (!canFetch) { mode = fallback ? 'embed' : 'out'; return null; }
+    pending = refreshMedia(v.url).then(got => {
+      pending = null;
+      if (got.media) {
+        if (owner) updateVideo(v.id, { media: got.media });
+        v.media = got.media; v.mediaAt = Date.now();
+        mode = 'file';
+      } else if (got.blocked) {
+        mode = 'blocked';
+      } else {
+        /* קישור מקוצר (fb.watch): הכתובת המלאה פותחת את הנגן המשובץ */
+        if (!fallback && got.full && embedUrl(got.full)) {
+          if (owner) updateVideo(v.id, { full: got.full });
+          fallback = embedUrl(got.full);
+        }
+        mode = fallback ? 'embed' : 'out';
+      }
+      paintCover();
+    });
+    return pending;
   };
 
-  const showFile = src => {
-    stage.textContent = '';
-    const vid = el('video', { src, controls: true, playsInline: true, preload: 'metadata', autoplay: true });
-    vid.setAttribute('playsinline', '');
-    const still = posterUrls.get(v.id);
-    if (still) vid.poster = still;
-    /* כתובת חתומה שפגה — מרעננים פעם אחת, ורק אז נופלים לנגן המשובץ */
+  const cover = el('div.cover');
+  if (still) {
+    const img = el('img', { alt: '', src: still });
+    img.referrerPolicy = 'no-referrer';
+    img.onerror = () => img.remove();
+    cover.appendChild(img);
+  }
+  const bigPlay = el('button.bigp', { type: 'button', 'aria-label': 'ניגון' }, icon('play'));
+  const outLink = el('a.out', { href: v.url, target: '_blank', rel: 'noopener noreferrer' }, icon('ext'), 'מתנגן ב' + name);
+  const why = el('p.why', { text: name + ' לא מרשה לנגן את הסרטון הזה מחוץ ל' + name + ', בגלל זכויות יוצרים — בדרך כלל על המוזיקה שבו.' });
+  const cta = el('div.cta', null, bigPlay, why, outLink);
+  cover.appendChild(cta);
+  const paintCover = () => {
+    /* אין קובץ ואין נגן: ▶ עצמו פותח את הסרטון אצלם, והתווית אומרת לאן.
+       חסום: אין ▶ בכלל — רק ההסבר, ויציאה כבחירה */
+    const blocked = mode === 'blocked';
+    bigPlay.hidden = blocked;
+    why.hidden = !blocked;
+    outLink.hidden = mode !== 'out' && !blocked;
+    outLink.lastChild.textContent = (blocked ? 'פתיחה ב' : 'מתנגן ב') + name;
+    bigPlay.classList.toggle('busy', !!pending);
+  };
+  paintCover();
+  stage.appendChild(cover);
+  /* יודעים מראש אם יש קובץ, כדי ש-▶ יתנהג נכון כבר בלחיצה הראשונה.
+     ▶ מסתובב עד שיודעים — ובחסום מתחלף בהסבר */
+  resolve();
+  paintCover();
+
+  /* --- הזמן: קו שאפשר לגרור, ומספרים --- */
+  const fill = el('i');
+  const knob = el('span.knob');
+  const bubble = el('span.bubble.num');
+  const nowAt = el('span.num');
+  const total = el('span.num');
+  /* tl ולא track: track הוא פס ההתקדמות בחוברת, והכלל שלו היה תופס גם כאן */
+  const progress = el('div.progress', { hidden: true, role: 'slider', tabindex: '0', 'aria-label': 'מיקום בסרטון', 'aria-valuemin': '0' },
+    el('div.tl', null, fill, knob, bubble), el('div.times', null, nowAt, total));
+
+  const playFile = src => {
+    video = el('video', { src, playsInline: true, preload: 'auto', autoplay: true });
+    video.setAttribute('playsinline', '');
+    if (still) video.poster = still;
+    /* רק סרטון לאורך ממלא את המסך; לרוחב או מרובע נשאר שלם — במילוי נחתך
+       ממנו יותר מחצי. video מתאפס כשהקובץ נכשל, ואירוע שכבר בתור עוד מגיע */
+    video.addEventListener('loadedmetadata', () => { if (video) video.classList.toggle('wide', video.videoWidth >= video.videoHeight); });
+    video.addEventListener('timeupdate', () => {
+      if (!video || !video.duration) return;
+      progress.hidden = false;
+      if (!dragging) paintTime(video.currentTime);
+    });
+    video.addEventListener('pause', () => { layer.classList.add('paused'); toggleBtn.setAttribute('aria-label', 'המשך ניגון'); });
+    video.addEventListener('play', () => { layer.classList.remove('paused'); toggleBtn.setAttribute('aria-label', 'עצירה'); });
+    /* כתובת חתומה שפגה — מרעננים פעם אחת; לא הצליח — הנגן המשובץ */
     let retried = false;
-    vid.onerror = async () => {
-      if (retried) { fallback(); return; }
+    video.onerror = async () => {
+      if (!video) return;
+      if (retried) { toVideoOut(); return; }
       retried = true;
       const fresh = await refreshMedia(v.url);
-      if (fresh.media && fresh.media !== src) {
-        if (!readOnly()) updateVideo(v.id, { media: fresh.media });
-        vid.src = fresh.media;
-        vid.load();
+      if (!video) return;
+      if (fresh.media && fresh.media !== video.src) {
+        if (owner) updateVideo(v.id, { media: fresh.media });
+        video.src = fresh.media;
+        video.load();
+        video.play().catch(() => {});
         return;
       }
-      fallback();
+      toVideoOut(fresh.blocked);
     };
-    stage.appendChild(vid);
+    stage.textContent = '';
+    stage.appendChild(video);
+    video.play().catch(() => layer.classList.add('paused'));
+  };
+  /* blocked: הנגן שלהם לא יעזור — רק ישלח אליהם, ולכן לא נופלים אליו */
+  const toVideoOut = blocked => {
+    if (video) { video.remove(); video = null; }
+    progress.hidden = true;
+    dragging = false;
+    layer.classList.remove('paused', 'seeking', 'ctrl', 'fast');
+    if (!blocked && fallback) { mode = 'embed'; playEmbed(fallback); paintRail(); return; }
+    mode = blocked ? 'blocked' : 'out';
+    stage.textContent = '';
+    stage.appendChild(cover);
+    paintCover();
+    paintRail();
   };
 
-  const showEmbed = src => {
-    stage.textContent = '';
+  const clock = sec => {
+    const n = Math.max(0, Math.floor(sec || 0));
+    return Math.floor(n / 60) + ':' + String(n % 60).padStart(2, '0');
+  };
+  const paintTime = t => {
+    if (!video || !video.duration) return;
+    const d = video.duration;
+    const at = Math.min(100, Math.max(0, t / d * 100)) + '%';
+    fill.style.width = at; knob.style.left = at; bubble.style.left = at;
+    nowAt.textContent = clock(t); total.textContent = clock(d);
+    bubble.textContent = clock(t) + ' / ' + clock(d);
+    progress.setAttribute('aria-valuemax', String(Math.round(d)));
+    progress.setAttribute('aria-valuenow', String(Math.round(t)));
+    progress.setAttribute('aria-valuetext', clock(t) + ' מתוך ' + clock(d));
+  };
+  const jump = sec => {
+    if (!video || !video.duration) return;
+    video.currentTime = Math.min(video.duration - 0.05, Math.max(0, video.currentTime + sec));
+    paintTime(video.currentTime);
+  };
+  /* גרירה: הסרטון נעצר בזמן הגרירה וממשיך אחריה, אם ניגן. fastSeek (סאפרי)
+     קופץ למסגרת הקרובה — מהיר תוך כדי; בשחרור — הזמן המדויק. */
+  let dragging = false;
+  let resume = false;
+  const timeAt = x => {
+    const r = progress.firstChild.getBoundingClientRect();
+    return Math.min(1, Math.max(0, (x - r.left) / r.width)) * video.duration;
+  };
+  const seekTo = (t, exact) => {
+    if (!exact && video.fastSeek) video.fastSeek(t); else video.currentTime = t;
+    paintTime(t);
+  };
+  progress.addEventListener('pointerdown', e => {
+    if (!video || !video.duration) return;
+    e.preventDefault();
+    dragging = true;
+    resume = !video.paused;
+    /* הקו מתעבה לפני החישוב — המיקום נמדד על הקו שרואים */
+    layer.classList.add('seeking');
+    try { progress.setPointerCapture(e.pointerId); } catch (err) { /* דפדפן ישן — הגרירה עובדת גם בלי */ }
+    video.pause();
+    seekTo(timeAt(e.clientX));
+  });
+  progress.addEventListener('pointermove', e => { if (dragging && video) seekTo(timeAt(e.clientX)); });
+  const endDrag = (e, commit) => {
+    if (!dragging) return;
+    dragging = false;
+    layer.classList.remove('seeking');
+    if (!video) return;
+    if (commit) seekTo(timeAt(e.clientX), true);
+    if (resume) video.play().catch(() => {});
+    showCtrl();
+  };
+  progress.addEventListener('pointerup', e => endDrag(e, true));
+  /* בלי commit: בביטול (שיחה נכנסת, מחווה של המערכת) המיקום של האצבע לא אמין */
+  progress.addEventListener('pointercancel', e => endDrag(e, false));
+  progress.addEventListener('keydown', e => {
+    const step = e.key === 'ArrowRight' ? 5 : e.key === 'ArrowLeft' ? -5 : 0;
+    if (!step) return;
+    e.preventDefault();
+    jump(step);
+  });
+
+  /* --- הפקדים: אחורה משמאל, ▶/❚❚ באמצע, קדימה מימין ---
+     בעצירה תמיד; בניגון — אחרי נגיעה, ונעלמים אחרי שלוש שניות בלי מגע */
+  let ctrlTimer = 0;
+  const showCtrl = () => {
+    layer.classList.add('ctrl');
+    clearTimeout(ctrlTimer);
+    ctrlTimer = setTimeout(() => { if (!dragging) layer.classList.remove('ctrl'); }, 3000);
+  };
+  const hideCtrl = () => { clearTimeout(ctrlTimer); layer.classList.remove('ctrl'); };
+  const toggle = () => {
+    if (!video) return;
+    if (video.paused) video.play().catch(() => {}); else video.pause();
+    showCtrl();
+  };
+  const toggleBtn = el('button.resume', { type: 'button', 'aria-label': 'עצירה', onclick: toggle }, icon('play', 'pl'), icon('pause', 'pz'));
+  const mid = el('div.mid', null,
+    el('button.skip', { type: 'button', 'aria-label': '10 שניות אחורה', onclick: () => { jump(-10); showCtrl(); } }, icon('back10'), el('span.num', { text: '10' })),
+    toggleBtn,
+    el('button.skip', { type: 'button', 'aria-label': '10 שניות קדימה', onclick: () => { jump(10); showCtrl(); } }, icon('fwd10'), el('span.num', { text: '10' })));
+
+  /* מה שקרה בנגיעה כפולה ובלחיצה ארוכה — רואים מיד, ונעלם */
+  const hint = el('div.seekhint', { 'aria-hidden': 'true' }, icon('fwd10', 'f'), icon('back10', 'b'), el('span.num'));
+  let hintTimer = 0;
+  const flash = (side, sum) => {
+    hint.classList.toggle('fwd', side > 0);
+    hint.lastChild.textContent = sum + ' שניות';
+    hint.classList.remove('on');
+    void hint.offsetWidth;
+    hint.classList.add('on');
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(() => hint.classList.remove('on'), 700);
+  };
+  const fastTag = el('div.fasttag', { 'aria-hidden': 'true' }, el('span.num', { text: '2×' }), icon('ff'));
+
+  const playEmbed = src => {
     const frame = el('iframe', { src, title: v.title, allow: 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share', allowFullscreen: true });
     frame.referrerPolicy = 'strict-origin-when-cross-origin';
+    stage.textContent = '';
+    /* אינסטגרם: רק החלון של הסרטון, בלי הכותרת, הלייקים והתגובות שלהם —
+       החישוב ב-.igcrop ב-app.css */
+    if (v.platform === 'instagram') {
+      const box = el('div.igcrop', null, frame);
+      /* בפוסט הקופסה בפרופורציה של התמונה (מרובע, 4:5, לרוחב), ולא יותר
+         גבוהה מ-4:5. ברילס היא תמיד 4:5 — התמונה שלו 9:16 ולא תעזור. */
+      const img = cover.querySelector('img');
+      if (!isPortrait(playable(v)) && img && img.naturalWidth) {
+        const r = Math.min(1.25, Math.max(0.52, img.naturalHeight / img.naturalWidth));
+        box.style.setProperty('--ig-r', r.toFixed(3));
+      }
+      stage.appendChild(box);
+      return;
+    }
     if (isPortrait(playable(v))) frame.classList.add('tall');
     stage.appendChild(frame);
-    /* מה שקורה בתוך הנגן המשובץ שייך לפלטפורמה ואי אפשר לקרוא אותו —
-       לכן דרך היציאה כתובה מראש בכפתור למטה */
   };
 
-  const fallback = () => {
-    if (embed) { showEmbed(embed); return; }
-    cover('לא הצלחנו לנגן כאן.');
-  };
-
-  /* מצב התחלתי: התמונה, וכפתור ניגון גדול. הנגינה מתחילה בלחיצה — כך גם
-     הקול מותר, וגם לא נשלחת בקשה לפלטפורמה בכל פתיחה של סרטון. */
-  const cover = why => {
-    stage.textContent = '';
-    const still = posterCandidates(v, posterUrls.get(v.id))[0];
-    if (still) {
-      const img = el('img.cover', { alt: '', src: still });
-      img.referrerPolicy = 'no-referrer';
-      img.onerror = () => img.remove();
-      stage.appendChild(img);
+  bigPlay.onclick = async () => {
+    if (mode === 'out') { window.open(v.url, '_blank', 'noopener'); return; }
+    if (!mode) {
+      await resolve();
+      /* אחרי המתנה לרשת הדפדפן כבר לא מתייחס לזה כלחיצה, ולא יפתח חלון —
+         מתברר שאין קובץ? התווית "מתנגן ב…" מופיעה, ולוחצים שוב. חסום —
+         ההסבר מופיע במקום ▶ */
+      if (mode === 'out' || mode === 'blocked') return;
     }
-    const playable_ = v.media || embed || canFetch;
-    if (playable_ && !why) {
-      const big = el('button.big.glass', { type: 'button', 'aria-label': 'ניגון' }, icon('play'));
-      big.onclick = () => play(big);
-      stage.appendChild(big);
-    } else {
-      stage.appendChild(msg(why || embedBlocked(playable(v)) || 'אי אפשר לנגן את הקישור הזה בתוך האפליקציה.'));
-    }
+    if (mode === 'file') playFile(v.media);
+    else if (mode === 'embed') playEmbed(embed || fallback);
   };
 
-  const play = async big => {
-    /* הנגן המשובץ קודם: הוא נבנה מהקישור הקבוע ולא פג. הקובץ עצמו רק
-       כשאין נגן משובץ (קישור מקוצר), כי הכתובת שלו פגה אחרי שעות. */
-    if (embed) { showEmbed(embed); return; }
-    if (v.media && mediaFresh(v)) { showFile(v.media); return; }
-    if (canFetch) {
-      big.disabled = true;
-      big.classList.add('spin');
-      const fresh = await refreshMedia(v.url);
-      if (fresh.media) {
-        if (!readOnly()) updateVideo(v.id, { media: fresh.media, full: fresh.full || undefined });
-        v.media = fresh.media;
-        showFile(fresh.media);
-        return;
-      }
-      if (fresh.full && embedUrl(fresh.full)) {
-        if (!readOnly()) updateVideo(v.id, { full: fresh.full });
-        showEmbed(embedUrl(fresh.full));
-        return;
-      }
-    }
-    if (v.media) { showFile(v.media); return; }
-    cover('לא הצלחנו לנגן כאן.');
+  /* --- מחוות על הסרטון, כמו ביוטיוב ---
+     נגיעה: הפקדים מופיעים או נעלמים (ובעצירה — ממשיכים). נגיעה כפולה: ימין
+     10 קדימה, שמאל 10 אחורה, וכל נגיעה נוספת מיד אחריה — עוד 10. לחיצה
+     ארוכה: מהירות כפולה כל עוד האצבע על המסך. הנגיעה הבודדת מחכה רגע
+     (TAP), כדי לדעת שלא באה אחריה שנייה. */
+  const TAP = 300;
+  const HOLD = 450;
+  let lastTap = null;
+  let tapTimer = 0;
+  let streak = null;
+  let holdTimer = 0;
+  let holding = false;
+  const onVideo = e => video && e.target === video;
+  const sideOf = x => { const r = stage.getBoundingClientRect(); return x - r.left > r.width / 2 ? 1 : -1; };
+  const stopHold = () => {
+    clearTimeout(holdTimer);
+    if (holding && video) video.playbackRate = 1;
+    holding = false;
+    layer.classList.remove('fast');
   };
+  stage.addEventListener('pointerdown', e => {
+    if (!onVideo(e)) return;
+    stopHold();
+    if (!video.paused) holdTimer = setTimeout(() => {
+      if (!video) return;
+      holding = true;
+      video.playbackRate = 2;
+      layer.classList.add('fast');
+    }, HOLD);
+  });
+  stage.addEventListener('pointerup', e => {
+    if (!onVideo(e)) { stopHold(); return; }
+    const held = holding;
+    stopHold();
+    if (held) return;
+    const now = Date.now();
+    const side = sideOf(e.clientX);
+    if (streak && streak.side === side && now - streak.at < 800) {
+      clearTimeout(tapTimer); lastTap = null;
+      streak.at = now; streak.total += 10;
+      jump(10 * side); flash(side, streak.total);
+      return;
+    }
+    if (lastTap && lastTap.side === side && now - lastTap.at < TAP) {
+      clearTimeout(tapTimer); lastTap = null;
+      streak = { side, at: now, total: 10 };
+      jump(10 * side); flash(side, 10);
+      return;
+    }
+    streak = null;
+    lastTap = { side, at: now };
+    clearTimeout(tapTimer);
+    tapTimer = setTimeout(() => {
+      lastTap = null;
+      if (!video) return;
+      if (video.paused) toggle();
+      else if (layer.classList.contains('ctrl')) hideCtrl();
+      else showCtrl();
+    }, TAP);
+  });
+  stage.addEventListener('pointercancel', stopHold);
+  /* לחיצה ארוכה באייפון פותחת תפריט של המערכת על הסרטון */
+  stage.addEventListener('contextmenu', e => { if (video && e.target === video) e.preventDefault(); });
 
-  cover();
+  /* --- מסך מלא: מסתיר את כל מה שצף, ובאייפון — המסך המלא של המערכת --- */
+  let immersive = false;
+  function fsEl() { return document.fullscreenElement || document.webkitFullscreenElement; }
+  const setImmersive = on => { immersive = on; layer.classList.toggle('immersive', on); };
+  const enterFull = async () => {
+    const canElement = document.fullscreenEnabled || document.webkitFullscreenEnabled;
+    if (video && !canElement && video.webkitEnterFullscreen) { try { video.webkitEnterFullscreen(); return; } catch (e) { /* נופלים למצב הממלא */ } }
+    setImmersive(true);
+    try {
+      if (layer.requestFullscreen) await layer.requestFullscreen({ navigationUI: 'hide' });
+      else if (layer.webkitRequestFullscreen) layer.webkitRequestFullscreen();
+    } catch (e) { /* לא הורשה — המצב הממלא מספיק */ }
+  };
+  function leaveFull() {
+    setImmersive(false);
+    if (!fsEl()) return;
+    try { const r = (document.exitFullscreen || document.webkitExitFullscreen).call(document); if (r && r.catch) r.catch(() => {}); } catch (e) { /* כבר יצא */ }
+  }
+  const onFs = () => { if (!fsEl() && immersive) setImmersive(false); };
+  document.addEventListener('fullscreenchange', onFs);
+  document.addEventListener('webkitfullscreenchange', onFs);
 
-  const bottom = el('div.player-bot');
-  const tags = el('div.tags');
-  if (v.category && categoryName(v.category)) tags.appendChild(el('span.chip', { 'aria-pressed': 'true', text: categoryName(v.category) }));
-  tags.append(name + ' · נשמר ' + whenText(v.at));
-  bottom.appendChild(tags);
-  if (v.note) bottom.appendChild(el('p.note', { text: v.note }));
-  if (!readOnly() && !posterUrls.has(v.id)) bottom.appendChild(fixPoster(v, () => { if (!stage.querySelector('video, iframe')) cover(); }));
-  const acts = el('div.acts', null, openOut);
-  if (!readOnly()) {
-    const edit = el('button.btn.icon', { type: 'button', 'aria-label': 'עריכה', onclick: () => { close(); openEditor(null, getVideo(v.id)); } }, icon('pen'));
-    const del = el('button.btn.icon', { type: 'button', 'aria-label': 'מחיקה' }, icon('trash'));
-    del.onclick = () => {
-      acts.hidden = true;
-      bottom.appendChild(confirmBox('למחוק את "' + v.title + '"?', 'מחיקה', () => {
+  /* סגירת הנגן סוגרת קודם את מה שפתוח מעליו (⋯). בלי זה הצעד שלו נשאר
+     בהיסטוריה, ו"חזרה" הבאה בבית לא עשתה כלום. */
+  let menuDone = null;
+  const shutAll = () => {
+    if (menuDone) menuDone();
+    close();
+  };
+  const shut = el('button.ibtn', { type: 'button', 'aria-label': 'סגירה', onclick: () => shutAll() }, icon('x'));
+  const full = el('button.ibtn', { type: 'button', 'aria-label': 'מסך מלא', onclick: enterFull }, icon('expand'));
+  const exitFull = el('button.ibtn.exit-full', { type: 'button', 'aria-label': 'יציאה ממסך מלא', onclick: leaveFull }, icon('shrink'));
+  const topov = el('div.topov', null, full, shut);
+
+  /* --- הכיתוב: קטגוריה, שם, הערה --- */
+  const cap = el('div.cap');
+  const cat = v.category && categoryName(v.category);
+  if (cat) cap.appendChild(el('span.chip', { 'aria-pressed': 'true', text: cat }));
+  cap.appendChild(el('h2', { text: v.title }));
+  if (v.note) {
+    /* div ולא כפתור: באייפון הקיצור לשתי שורות לא עובד על כפתור. נגיעה פותחת
+       את כולה, ועוד נגיעה מקצרת */
+    const note = el('div.note', { text: v.note });
+    note.onclick = () => note.classList.toggle('open');
+    cap.appendChild(note);
+  }
+
+  /* --- העמודה בצד ---
+     vside ולא side: side הוא השורה מתחת למגרש בחוברת */
+  const railBtn = (ic, label, fn, href) => {
+    const b = href
+      ? el('a.ibtn', { href, target: '_blank', rel: 'noopener noreferrer', 'aria-label': label }, icon(ic))
+      : el('button.ibtn', { type: 'button', 'aria-label': label, onclick: fn }, icon(ic));
+    return el('div.rb', null, b, el('span', { text: label }));
+  };
+  const rail = el('div.vside');
+  const paintRail = () => {
+    rail.textContent = '';
+    /* כשאין נגן ▶ כבר פותח אצלם, ובחסום יש "פתיחה ב…" באמצע — אין צורך בשני
+       כפתורים לאותו מקום */
+    if (mode !== 'out' && mode !== 'blocked') rail.appendChild(railBtn('ext', name, null, v.url));
+    if (owner) rail.appendChild(railBtn('pen', 'עריכה', () => { shutAll(); openEditor(null, getVideo(v.id)); }));
+    rail.appendChild(railBtn('dots', 'עוד', () => openMenu()));
+  };
+  paintRail();
+  /* כשמתברר שאין קובץ, גם העמודה מתעדכנת */
+  if (pending) pending.then(() => { paintCover(); paintRail(); });
+
+  /* --- ⋯ — תפריט פעולות, כמו בכל אפליקציה בטלפון. המחיקה בקבוצה משלה, למטה --- */
+  function openMenu() {
+    const dim = el('div.mdim');
+    const menu = el('div.amenu', { role: 'menu' });
+    const done = openLayer(() => { dim.remove(); menu.remove(); menuDone = null; });
+    menuDone = done;
+    dim.onclick = () => done();
+    const item = (ic, text, fn, cls) => el('button.it' + (cls || ''), { type: 'button', onclick: fn }, icon(ic), text);
+    const g1 = el('div.mgrp');
+    if (owner) {
+      g1.appendChild(item('pen', 'עריכת השם, הקטגוריה וההערה', () => { shutAll(); openEditor(null, getVideo(v.id)); }));
+      g1.appendChild(item('tag', 'העברה לקטגוריה אחרת', () => {
+        g1.textContent = '';
+        [{ id: '', name: 'בלי קטגוריה' }, ...listCategories()].forEach(c => g1.appendChild(item(c.id === (v.category || '') ? 'check' : 'tag', c.name, () => {
+          updateVideo(v.id, { category: c.id || null });
+          v.category = c.id || null;
+          done(); toast('הועבר ל"' + c.name + '"'); paint(); syncNow();
+        })));
+      }));
+    }
+    g1.appendChild(el('a.it', { href: v.url, target: '_blank', rel: 'noopener noreferrer', onclick: () => done() }, icon('ext'), 'פתיחה ב' + name));
+    if (owner && !posterUrls.has(v.id)) {
+      g1.appendChild(item('sync', 'להביא תמונה מחדש', () => {
+        g1.textContent = '';
+        g1.appendChild(el('div.it.plain', null, fixPoster(v, () => {})));
+      }));
+    }
+    menu.appendChild(g1);
+    if (owner) {
+      const g2 = el('div.mgrp');
+      const del = item('trash', 'מחיקת הסרטון', () => {
+        /* לחיצה שנייה — אחרי שהכפתור אומר בדיוק מה יקרה */
+        if (!del.classList.contains('sure')) { del.classList.add('sure'); del.lastChild.textContent = 'למחוק את "' + v.title + '"? לחיצה נוספת מוחקת'; return; }
         removeVideo(v.id);
         posterUrls.delete(v.id);
-        close();
+        shutAll();
         paint();
         toast('נמחק');
         syncNow();
-      }, () => { acts.hidden = false; }));
-    };
-    acts.append(edit, del);
+      }, '.del');
+      g2.appendChild(del);
+      menu.appendChild(g2);
+    }
+    menu.appendChild(el('button.mcancel', { type: 'button', text: 'ביטול', onclick: () => done() }));
+    layer.append(dim, menu);
   }
-  bottom.appendChild(acts);
 
-  layer.append(el('div.player-top', null, el('b', { text: v.title }), shut), stage, bottom);
+  /* Escape סוגר את השכבה העליונה בלבד, כמו "חזרה" */
+  offKey = onEscape(() => {
+    if (immersive) leaveFull();
+    else if (menuDone) menuDone();
+    else close();
+  });
+  layer.append(stage, el('div.scrim-t'), el('div.scrim-b'), hint, fastTag, topov, cap, rail, progress, mid, exitFull);
   document.body.appendChild(layer);
   shut.focus();
+
+  /* ניקוי מאזיני המסך המלא כשהנגן נסגר */
+  const obs = new MutationObserver(() => {
+    if (layer.isConnected) return;
+    document.removeEventListener('fullscreenchange', onFs);
+    document.removeEventListener('webkitfullscreenchange', onFs);
+    obs.disconnect();
+  });
+  obs.observe(document.body, { childList: true });
 }
 
 /* תמונה שלא נשמרה: חיפוש מחדש ביד, מתוך הנגן. ההשלמה ברקע מנסה לבד בכל

@@ -39,6 +39,7 @@
   --glass-shine: inset 0 1px 1px rgba(255, 255, 255, .9), inset 0 -1px 1px rgba(15, 26, 43, .06);
   --glass-shadow: 0 12px 30px rgba(15, 26, 43, .18);
   --glass-dense: rgba(255, 255, 255, .92);
+  --menu-bg: rgba(255, 255, 255, .98);      /* תפריט ⋯ בנגן */
   --pitch-a: #E4EBF3;
   --pitch-b: #DBE3EE;
   --pitch-line: rgba(15, 26, 43, .22);
@@ -91,6 +92,7 @@
   --glass-shine: inset 0 1px 1px rgba(255, 255, 255, .45), inset 0 -1px 1px rgba(255, 255, 255, .12);
   --glass-shadow: 0 12px 30px rgba(0, 0, 0, .45);
   --glass-dense: rgba(14, 22, 36, .88);
+  --menu-bg: rgba(28, 38, 56, .97);
   --pitch-a: rgba(23, 35, 52, .92);
   --pitch-b: rgba(19, 30, 45, .92);
   --pitch-line: rgba(255, 255, 255, .15);
@@ -544,25 +546,128 @@ input[type="checkbox"]:checked::after { inset-inline-start: 21px; background: va
 .sheet form, .stack { display: flex; flex-direction: column; gap: .9rem; }
 .sheet-go { position: sticky; bottom: calc(-1rem - env(safe-area-inset-bottom)); margin: 0 calc(-1 * var(--pad)) calc(-1rem - env(safe-area-inset-bottom)); padding: .7rem var(--pad) calc(1rem + env(safe-area-inset-bottom)); background: linear-gradient(transparent, var(--surface-solid) 30%); }
 
-.player { position: fixed; inset: 0; z-index: 60; background: #000; display: flex; flex-direction: column; }
-.player-top { display: flex; align-items: center; gap: .6rem; padding: calc(.8rem + env(safe-area-inset-top)) max(14px, env(safe-area-inset-right, 0px)) .6rem max(14px, env(safe-area-inset-left, 0px)); color: #fff; }
-.player-top b { flex: 1; min-width: 0; font-size: 1rem; line-height: 1.3; }
-.player-top .icon-btn { background: rgba(255, 255, 255, .12); border-color: transparent; color: #fff; }
-.stage { position: relative; flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; }
-.stage > video, .stage > iframe { width: 100%; height: 100%; border: 0; display: block; object-fit: contain; background: #000; }
-.stage > iframe.tall { max-width: min(100%, 420px); }
-.stage .cover { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: .55; }
-.stage .big { position: relative; width: 74px; height: 74px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid rgba(232, 185, 49, .6); background: rgba(0, 0, 0, .4); color: #fff; }
-.stage .big svg { width: 26px; height: 26px; margin-inline-start: -3px; color: #E8B931; }
-.stage .msg { position: absolute; inset: auto 16px 16px; text-align: center; color: #fff; font-size: .88rem; }
-.stage .msg a { color: #E8B931; font-weight: 700; }
-.player-bot { background: var(--surface-solid); color: var(--text); border-top: 1px solid var(--line); padding: .8rem var(--pad) calc(1rem + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: .7rem; }
-.player-bot .tags { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; font-size: .78rem; color: var(--faint); }
-.player-bot .tags .chip { height: 26px; font-size: .76rem; padding: 0 .65rem; }
-.player-bot .note { margin: 0; font-size: .9rem; color: var(--muted); white-space: pre-wrap; max-height: 7.5em; overflow-y: auto; }
-.acts { display: flex; gap: .5rem; }
-.acts .btn { flex: 1; min-width: 0; }
-.acts .btn.icon { flex: none; width: 46px; padding: 0; }
+/* ── הנגן — כמו בספריית המתכונים (Recipes/css/app.css) ───────────────────
+   הסרטון הוא המסך, מקצה לקצה. כל השאר צף עליו: ✕ ⛶ למעלה, הכיתוב למטה על
+   הצללה, הפעולות בעמודה בצד. הנגן שחור בשתי הערכות, כמו בכל אפליקציית וידאו. */
+.player { position: fixed; inset: 0; height: 100vh; height: 100dvh; z-index: 60; background: #000; overflow: hidden; color: #fff; }
+.stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: #000; transition: height .26s cubic-bezier(.25, .8, .3, 1); }
+/* סרטון לאורך ממלא את המסך; סרטון לרוחב או מרובע (wide) נשאר שלם */
+.stage > video { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+.stage > video.wide { object-fit: contain; }
+.stage > iframe { width: 100%; height: 100%; border: 0; display: block; background: #000; }
+.stage > iframe.tall { max-width: min(100%, 460px); }
+/* אינסטגרם בלי קובץ: הנגן שלהם הוא דף שלם — שם משתמש ו-"View profile"
+   מעל הסרטון, לייקים ותגובות מתחתיו — ואי אפשר לגעת בו מבחוץ. לכן חותכים:
+   חלון בגודל קופסת הסרטון בלבד, והדף שלהם זז למעלה בגובה הכותרת.
+   · הכותרת בגובה קבוע (--ig-head).
+   · הקופסה ברוחב הדף שלהם (עד 540px), ובגובה --ig-r מהרוחב. ברילס היא
+     4:5 גם כשהסרטון 9:16 — הסרטון באמצע עם פסים שחורים בצדדים (צילום של
+     בעל הריפו; ב-9:16 נכנסו לחלון הלייקים ושדה התגובה). בפוסט — לפי
+     התמונה, ב-player.js.
+   אינסטגרם ישנו את המידות? כאן מתקנים, במקום אחד. */
+.stage { container-type: size; }
+.igcrop { --ig-head: 56px; --ig-r: 1.25; position: relative; overflow: hidden; flex: none;
+  width: min(100cqw, 540px, 100cqh / var(--ig-r)); aspect-ratio: 1 / var(--ig-r); background: #000;
+  clip-path: inset(0 0 2px); }   /* הקו שמעל "View more on Instagram" */
+.igcrop > iframe { position: absolute; top: calc(-1 * var(--ig-head)); left: 0; width: 100%; height: calc(100% + var(--ig-head) + 420px); border: 0; display: block; background: #000; }
+.stage .cover { position: absolute; inset: 0; }
+.stage .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cta { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); display: grid; justify-items: center; gap: .6rem; z-index: 1; }
+.bigp { width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center; color: #E8B931; border: 1.5px solid rgba(232, 185, 49, .4);
+  background: rgba(10, 16, 28, .55); box-shadow: 0 0 40px 14px rgba(10, 16, 28, .3); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.bigp svg { width: 24px; height: 24px; margin-inline-start: -3px; }
+.bigp.busy svg { animation: spin 1s linear infinite; }
+.cta .out { display: inline-flex; align-items: center; gap: .35rem; padding: .25rem .8rem; border-radius: 999px; font-size: .82rem; font-weight: 700; color: #fff; text-decoration: none;
+  background: rgba(10, 16, 28, .6); border: 1px solid rgba(255, 255, 255, .2); }
+.cta .out svg { width: 13px; height: 13px; }
+/* רילס שאינסטגרם חוסמת מחוץ לה: הסבר במקום ▶. הנגן שחור בשתי הערכות */
+.cta .why { margin: 0; max-width: 30ch; padding: .7rem .95rem; border-radius: 16px; text-align: center; font-size: .9rem; line-height: 1.45; color: #fff;
+  background: rgba(10, 16, 28, .72); border: 1px solid rgba(255, 255, 255, .16); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.scrim-t { position: absolute; inset: 0 0 auto; height: calc(110px + env(safe-area-inset-top)); background: linear-gradient(rgba(0, 0, 0, .5), transparent); pointer-events: none; }
+.scrim-b { position: absolute; inset: auto 0 0; height: 55%; background: linear-gradient(transparent, rgba(0, 0, 0, .5) 40%, rgba(0, 0, 0, .86)); pointer-events: none; }
+.ibtn { width: 40px; height: 40px; flex: none; border-radius: 50%; display: grid; place-items: center; color: #fff; text-decoration: none;
+  background: rgba(10, 16, 28, .45); border: 1px solid rgba(255, 255, 255, .2); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.ibtn svg { width: 18px; height: 18px; }
+.topov { position: absolute; z-index: 3; top: calc(12px + env(safe-area-inset-top)); inset-inline: max(12px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-left, 0px)); display: flex; justify-content: flex-end; gap: .5rem; }
+.cap { position: absolute; z-index: 3; inset-inline-start: max(16px, env(safe-area-inset-right, 0px)); inset-inline-end: 76px; bottom: calc(26px + env(safe-area-inset-bottom)); }
+.cap .chip { height: 26px; font-size: .78rem; padding: 0 .7rem; }
+/* על הסרטון הזהב של הכהה גם בבהיר — הזהב הכהה של הבהיר נבלע בשחור */
+.cap .chip[aria-pressed="true"] { color: #E8B931; background: rgba(232, 185, 49, .14); border-color: rgba(232, 185, 49, .4); }
+.cap h2 { margin: .45rem 0 .25rem; font-size: 1.2rem; line-height: 1.25; color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, .4); }
+/* ההערה: שתי שורות; נגיעה פותחת את כולה, עם גלילה אם היא ארוכה. div ולא כפתור —
+   באייפון הקיצור לשתי שורות לא עובד על כפתור */
+.cap .note { font-size: .9rem; line-height: 1.45; color: rgba(255, 255, 255, .9); white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+.cap .note.open { display: block; -webkit-line-clamp: unset; max-height: 38vh; overflow-y: auto; overscroll-behavior: contain; }
+/* vside ולא side: side הוא השורה מתחת למגרש בחוברת */
+.vside { position: absolute; z-index: 3; inset-inline-end: max(10px, env(safe-area-inset-left, 0px)); bottom: calc(30px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: .9rem; align-items: center; }
+.vside .rb { display: grid; justify-items: center; gap: 3px; font-size: .66rem; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .5); }
+.vside .ibtn { width: 44px; height: 44px; }
+/* הזמן — משמאל לימין גם בעברית, כמו בכל נגן. בניגון: קו דק; בעצירה ובגרירה:
+   קו עבה עם ידית. אזור הנגיעה גבוה מהקו, כדי שלא צריך לכוון, ויושב מעל פס
+   הבית של האייפון — שם גרירה לרוחב מחליפה אפליקציה. */
+.progress { position: absolute; z-index: 3; left: 0; right: 0; bottom: env(safe-area-inset-bottom, 0px); height: 24px; direction: ltr; touch-action: none; cursor: pointer; }
+.progress:focus-visible { outline-offset: -2px; }
+.progress .tl { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255, 255, 255, .22); transition: left .15s, right .15s, bottom .15s, height .15s; }
+.progress .tl i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: #E8B931; border-radius: inherit; }
+.progress .knob { display: none; position: absolute; top: 50%; left: 0; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: #E8B931;
+  box-shadow: 0 0 0 4px rgba(232, 185, 49, .25), 0 2px 6px rgba(0, 0, 0, .5); }
+.progress .bubble { display: none; position: absolute; bottom: 16px; left: 0; transform: translateX(-50%); padding: .15rem .6rem; border-radius: 10px; white-space: nowrap;
+  font-size: .8rem; font-weight: 600; color: #fff; background: rgba(10, 16, 28, .82); border: 1px solid rgba(255, 255, 255, .18); }
+.progress .times { display: none; position: absolute; left: 14px; right: 14px; bottom: 21px; justify-content: space-between; font-size: .74rem; color: rgba(255, 255, 255, .85); text-shadow: 0 1px 2px rgba(0, 0, 0, .5); }
+.player.paused .progress .tl, .player.ctrl .progress .tl, .player.seeking .progress .tl { left: 12px; right: 12px; bottom: 9px; height: 6px; border-radius: 6px; }
+.player.paused .progress .knob, .player.ctrl .progress .knob, .player.seeking .progress .knob { display: block; }
+.player.paused .progress .times, .player.ctrl .progress .times { display: flex; }
+.player.seeking .progress .times { display: none; }
+.player.seeking .progress .bubble { display: block; }
+/* הכיתוב והעמודה עולים, כדי לפנות מקום לזמן ולקו העבה */
+.cap, .vside { transition: bottom .15s; }
+.player.paused .cap, .player.ctrl .cap, .player.seeking .cap { bottom: calc(50px + env(safe-area-inset-bottom)); }
+.player.paused .vside, .player.ctrl .vside, .player.seeking .vside { bottom: calc(54px + env(safe-area-inset-bottom)); }
+/* הפקדים: ▶/❚❚ ומשני צדיו 10 שניות — אחורה משמאל, קדימה מימין, כמו הזמן.
+   בעצירה תמיד, ובניגון אחרי נגיעה (ctrl) */
+.player .mid { display: none; position: absolute; z-index: 3; left: 50%; top: 46%; transform: translate(-50%, -50%); align-items: center; gap: 1.4rem; direction: ltr; }
+.player.paused .mid, .player.ctrl .mid { display: flex; }
+.player.seeking .mid { display: none; }
+.player .mid .resume { width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center; color: #E8B931; border: 1.5px solid rgba(232, 185, 49, .4);
+  background: rgba(10, 16, 28, .55); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.player .mid .resume svg { width: 24px; height: 24px; }
+.player .mid .resume .pl { margin-left: 3px; }
+.player.paused .mid .resume .pz, .player:not(.paused) .mid .resume .pl { display: none; }
+.player .mid .skip { position: relative; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; color: #fff;
+  background: rgba(10, 16, 28, .5); border: 1px solid rgba(255, 255, 255, .22); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.player .mid .skip svg { width: 34px; height: 34px; }
+.player .mid .skip span { position: absolute; padding-top: 2px; font-size: .66rem; font-weight: 700; }
+/* נגיעה כפולה: חצי עיגול בהיר בצד, החץ וכמה שניות. לחיצה ארוכה: 2× למעלה */
+.stage { touch-action: manipulation; }
+.stage > video { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.seekhint { position: absolute; z-index: 3; top: 22%; bottom: 30%; width: 36%; left: 0; border-radius: 0 50% 50% 0 / 0 50% 50% 0; display: grid; place-content: center; justify-items: center; gap: .35rem;
+  color: #fff; background: rgba(255, 255, 255, .14); opacity: 0; transition: opacity .25s; pointer-events: none; text-shadow: 0 1px 3px rgba(0, 0, 0, .5); }
+.seekhint.fwd { left: auto; right: 0; border-radius: 50% 0 0 50% / 50% 0 0 50%; }
+.seekhint.on { opacity: 1; transition: none; }
+.seekhint svg { width: 34px; height: 34px; }
+.seekhint .f, .seekhint.fwd .b { display: none; }
+.seekhint.fwd .f { display: block; }
+.seekhint span { font-size: .85rem; font-weight: 700; }
+.fasttag { display: none; position: absolute; z-index: 3; top: calc(64px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); align-items: center; gap: .3rem; direction: ltr;
+  padding: .3rem .85rem; border-radius: 999px; color: #fff; font-weight: 700; font-size: .9rem; background: rgba(10, 16, 28, .72); border: 1px solid rgba(255, 255, 255, .18); pointer-events: none; }
+.fasttag svg { width: 15px; height: 15px; }
+.player.fast .fasttag { display: inline-flex; }
+/* מסך מלא: כל מה שצף יורד, וכפתור יציאה קטן בפינה */
+.player .exit-full { display: none; position: absolute; z-index: 4; top: calc(12px + env(safe-area-inset-top)); inset-inline-end: calc(12px + env(safe-area-inset-left, 0px)); }
+.player.immersive .topov, .player.immersive .cap, .player.immersive .vside, .player.immersive .scrim-b, .player.immersive .scrim-t { display: none; }
+.player.immersive .exit-full { display: grid; }
+
+/* ⋯ — תפריט פעולות, כמו בכל אפליקציה בטלפון. המחיקה בקבוצה משלה, למטה */
+.mdim { position: absolute; inset: 0; z-index: 5; background: rgba(3, 6, 12, .55); }
+.amenu { position: absolute; z-index: 6; inset-inline: max(10px, env(safe-area-inset-right, 0px)) max(10px, env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom)); display: grid; gap: .5rem; max-width: var(--shell); margin: 0 auto; }
+.mgrp { background: var(--menu-bg); border-radius: 18px; overflow: hidden; border: 1px solid var(--line); }
+.mgrp .it { display: flex; align-items: center; gap: .7rem; width: 100%; padding: .85rem 1rem; border: 0; border-bottom: 1px solid var(--line); background: none; color: var(--text); font-size: .95rem; font-weight: 600; text-align: start; text-decoration: none; }
+.mgrp .it:last-child { border-bottom: 0; }
+.mgrp .it svg { width: 18px; height: 18px; color: var(--muted); }
+.mgrp .it.del, .mgrp .it.del svg { color: var(--gold-text); }
+.mgrp .it.del.sure { background: var(--gold-soft); }
+.mgrp .it.plain { display: block; }
+.mcancel { padding: .85rem; border-radius: 18px; border: 1px solid var(--line); background: var(--menu-bg); color: var(--text); font-weight: 800; font-size: .95rem; }
 .fixposter { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; font-size: .86rem; color: var(--muted); }
 .fixposter > span { flex: 1; min-width: 12ch; }
 .fixposter .btn.sm { width: auto; }
