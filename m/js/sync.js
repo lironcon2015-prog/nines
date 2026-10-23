@@ -56,8 +56,12 @@ function newerThan(mine, remote) {
   const stamp = list => new Map((list || []).map(x => [x.id, x.updatedAt || 0]));
   const theirVideos = stamp(remote.videos);
   const theirCats = stamp(remote.categories);
+  const theirSessions = stamp(remote.sessions);
   const ahead = (list, map) => (list || []).some(x => (x.updatedAt || 0) > (map.get(x.id) || 0));
-  return ahead(mine.videos, theirVideos) || ahead(mine.categories, theirCats);
+  /* אימון שנשמר ביומן הוא שינוי בלי אף סרטון — בלי השורה השלישית הוא היה
+     נשאר בטלפון של המאמן ולא מגיע לבן */
+  return ahead(mine.videos, theirVideos) || ahead(mine.categories, theirCats)
+    || ahead(mine.sessions, theirSessions);
 }
 
 /* חיבור ראשון של מכשיר שכבר יש בו סרטונים: מה שכאן עולה, ומה ששם יורד */

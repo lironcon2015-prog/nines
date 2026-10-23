@@ -20,6 +20,7 @@ import * as cloud from './cloud.js';
 import * as posters from './posters.js';
 import { state as sync, syncNow, onSync, autoOn } from './sync.js';
 import { $, el, icon, toast, whenText, agoText, sheet, openLayer, onEscape, afterLayers, readClipboard } from './ui.js';
+import { addVideosToPlan, planCard } from './train.js';
 
 /* פלטפורמות שהדף שלהן מצהיר על קובץ וידאו או ניתן לשיבוץ */
 const FETCHABLE = new Set(['facebook', 'instagram', 'tiktok', 'youtube', 'x', 'vimeo']);
@@ -42,6 +43,11 @@ const redownloaded = new Set();
 
 let root = null;
 let repaintBody = () => {};
+
+/* בחירה לאימון: Set של מזהים כשפעילה. pickOnMount — הגיעו מ"+ מהסרטונים"
+   במסך האימון, והמסך נפתח כבר בבחירה */
+let picking = null;
+let pickOnMount = false;
 
 /* --- חיפוש --- */
 
@@ -103,16 +109,32 @@ function metaText(v, withCat) {
   return [cat, whenText(v.at)].filter(Boolean).join(' · ');
 }
 
+/* נגיעה בכרטיס: נגן, ובבחירה לאימון — סימון */
+function tap(id) {
+  if (!picking) { openPlayer(id); return; }
+  if (picking.has(id)) picking.delete(id); else picking.add(id);
+  paint();
+}
+
+function pickMark(v, pv) {
+  if (!picking) return null;
+  pv.appendChild(el('span.chk', null, picking.has(v.id) ? icon('check') : null));
+  return String(picking.has(v.id));
+}
+
 function gridCard(v) {
   const pv = posterEl(v);
   pv.append(el('span.plat', { text: platformName(v.platform) }), el('span.playdot', null, icon('play')));
-  return el('button.rc', { type: 'button', onclick: () => openPlayer(v.id) },
+  const on = pickMark(v, pv);
+  return el('button.rc' + (picking ? '.sel' : ''), { type: 'button', 'aria-pressed': on, onclick: () => tap(v.id) },
     pv, el('h4', { text: v.title }), el('div.meta', { text: metaText(v, true) }));
 }
 
 function listRow(v, withCat) {
-  return el('button.lr', { type: 'button', onclick: () => openPlayer(v.id) },
-    posterEl(v),
+  const pv = posterEl(v);
+  const on = pickMark(v, pv);
+  return el('button.lr' + (picking ? '.sel' : ''), { type: 'button', 'aria-pressed': on, onclick: () => tap(v.id) },
+    pv,
     el('div.tx', null,
       el('h4', { text: v.title }),
       v.note ? el('p', { text: v.note }) : null,
@@ -265,6 +287,7 @@ function paintAll() {
   const keepFocus = document.activeElement && document.activeElement.id === 'q';
   root.textContent = '';
   root.appendChild(header());
+  root.appendChild(trainCard());
   root.appendChild(searchBox());
   const holder = el('div');
   root.appendChild(holder);
@@ -276,7 +299,68 @@ function paintAll() {
   });
   repaintBody();
   if (keepFocus) $('q').focus();
-  $('fab').hidden = readOnly();
+  $('fab').hidden = readOnly() || !!picking;
+  if (picking) root.appendChild(pickbar());
+}
+
+/* --- האימון הקרוב: כרטיס בראש הספרייה, ובחירה לאימון ---
+   בעל הריפו: "כרטיס בראש מסך הסרטונים". הבן (צופה) רואה את היומן. */
+function trainCard() {
+  if (readOnly()) {
+    return el('a.tcard', { href: '#/v/h' }, el('span.tic', null, icon('cup')),
+      el('span.ttx', null, el('b', { text: 'יומן האימונים' }), el('small', { text: 'הסיכומים, הציונים והשיאים' })),
+      el('span.go', null, icon('next')));
+  }
+  if (picking) {
+    return el('div.tcard.picking', null, el('span.tic', null, icon('check')),
+      el('span.ttx', null, el('b', { text: 'בחירה לאימון' }), el('small', { text: 'נגיעה בסרטון מסמנת אותו' })),
+      el('button.btn.sm.quiet', { type: 'button', text: 'ביטול', onclick: () => { picking = null; paint(); } }));
+  }
+  const p = planCard();
+  const card = el('div.tcard');
+  card.appendChild(el('a.tmain', { href: '#/v/a' }, el('span.tic', null, icon('watch')),
+    el('span.ttx', null, el('b', { text: p ? 'האימון הקרוב · ' + p.title : 'האימון הקרוב' }),
+      el('small.num', { text: p ? [p.date, p.count + (p.count === 1 ? ' תרגיל' : ' תרגילים'), p.total, p.live ? 'באמצע' : ''].filter(Boolean).join(' · ') : 'עוד לא נבנה — בוחרים תרגילים מהסרטונים' })),
+    el('span.go', null, icon('next'))));
+  card.appendChild(el('div.tacts', null,
+    el('button.chip', { type: 'button', onclick: () => { picking = new Set(); paint(); } }, icon('check'), 'בחירה לאימון'),
+    el('a.chip', { href: '#/v/h' }, icon('cup'), 'יומן')));
+  return card;
+}
+
+function pickbar() {
+  const n = picking.size;
+  return el('div.pickbar.glass', null,
+    el('b.num', { text: n ? (n === 1 ? 'נבחר סרטון אחד' : n + ' נבחרו') : 'בחרו סרטונים' }),
+    el('button.btn.gold.sm', { type: 'button', disabled: !n, onclick: () => {
+      const added = addVideosToPlan([...picking]);
+      picking = null;
+      toast(added === 1 ? 'נוסף לאימון הקרוב' : added + ' נוספו לאימון הקרוב');
+      location.hash = '#/v/a';
+    } }, 'הוספה לאימון'));
+}
+
+/* --- בשביל האימון (train.js) --- */
+
+/** הנגן, ומה לעשות כשנסגר — במגרש: טיימר התרגיל ממשיך */
+export function openVideo(id, onClose) {
+  afterLayers(() => buildPlayer(id, onClose));
+}
+
+/** התמונה של הסרטון, עם אותן נפילות כמו בכרטיס */
+export function videoThumb(v) {
+  return posterEl(v);
+}
+
+/** התמונות השמורות — כשנכנסים ישר למסך האימון, בלי לעבור בספרייה */
+export async function posterUrlsReady() {
+  if (!posterUrls.size) await loadPosterUrls();
+}
+
+/** "+ מהסרטונים" במסך האימון: הספרייה נפתחת כבר בבחירה */
+export function pickForTraining() {
+  pickOnMount = true;
+  location.hash = '#/v';
 }
 
 /* --- גיליון ההוספה והעריכה --- */
@@ -465,7 +549,7 @@ function openPlayer(id) {
   afterLayers(() => buildPlayer(id));
 }
 
-function buildPlayer(id) {
+function buildPlayer(id, onClose) {
   const v = getVideo(id);
   if (!v) return;
   const name = platformName(v.platform);
@@ -493,6 +577,7 @@ function buildPlayer(id) {
        קובץ שעוד בדרך לא ינגן ברקע אחרי הסגירה */
     if (video) { video.pause(); video.removeAttribute('src'); video.load(); video = null; }
     layer.remove();
+    if (onClose) onClose();
   });
 
   /* --- מה מנגנים ---
@@ -869,7 +954,14 @@ function buildPlayer(id) {
     /* כשאין נגן ▶ כבר פותח אצלם, ובחסום יש "פתיחה ב…" באמצע — אין צורך בשני
        כפתורים לאותו מקום */
     if (mode !== 'out' && mode !== 'blocked') rail.appendChild(railBtn('ext', name, null, v.url));
-    if (owner) rail.appendChild(railBtn('pen', 'עריכה', () => { shutAll(); openEditor(null, getVideo(v.id)); }));
+    if (owner) {
+      /* לאימון הקרוב, בלי לצאת מהנגן */
+      rail.appendChild(railBtn('plus', 'לאימון', () => {
+        addVideosToPlan([v.id]);
+        toast('נוסף לאימון הקרוב', { label: 'לאימון', run: () => { shutAll(); afterLayers(() => { location.hash = '#/v/a'; }); } });
+      }));
+      rail.appendChild(railBtn('pen', 'עריכה', () => { shutAll(); openEditor(null, getVideo(v.id)); }));
+    }
     rail.appendChild(railBtn('dots', 'עוד', () => openMenu()));
   };
   paintRail();
@@ -1123,6 +1215,8 @@ let onVisible = null;
 export function mountLibrary(node, prefill) {
   root = node;
   reload();
+  picking = pickOnMount && !readOnly() ? new Set() : null;
+  pickOnMount = false;
   document.title = 'ספריית הסרטונים — תשיעיות';
   $('fab').onclick = () => openEditor(null, null);
   /* ציור ראשון אחרי שידוע אילו תמונות שמורות במכשיר (IndexedDB, עשרות
@@ -1145,6 +1239,7 @@ export function mountLibrary(node, prefill) {
       if (offSync) offSync();
       document.removeEventListener('visibilitychange', onVisible);
       $('fab').hidden = true;
+      picking = null;
       root.textContent = '';
       root = null;
     }
