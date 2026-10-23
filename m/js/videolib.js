@@ -588,7 +588,7 @@ function buildPlayer(id, onClose) {
   const resolve = () => {
     if (mode || pending) return pending;
     if (!canFetch) { mode = fallback ? 'embed' : 'out'; return null; }
-    pending = refreshMedia(v.url).then(got => {
+    pending = refreshMedia(v.url, v.full).then(got => {
       pending = null;
       if (got.media) {
         if (owner) updateVideo(v.id, { media: got.media });
@@ -668,7 +668,7 @@ function buildPlayer(id, onClose) {
       if (!video) return;
       if (retried) { toVideoOut(); return; }
       retried = true;
-      const fresh = await refreshMedia(v.url);
+      const fresh = await refreshMedia(v.url, v.full);
       if (!video) return;
       if (fresh.media && fresh.media !== video.src) {
         if (owner) updateVideo(v.id, { media: fresh.media });
@@ -899,7 +899,11 @@ function buildPlayer(id, onClose) {
   const setImmersive = on => { immersive = on; layer.classList.toggle('immersive', on); };
   const enterFull = async () => {
     const canElement = document.fullscreenEnabled || document.webkitFullscreenEnabled;
-    if (video && !canElement && video.webkitEnterFullscreen) { try { video.webkitEnterFullscreen(); return; } catch (e) { /* נופלים למצב הממלא */ } }
+    /* באייפון אין מסך מלא לאלמנט, רק הנגן של המערכת — והוא בלי הנגיעה הכפולה
+       והלחיצה הארוכה. סרטון לאורך כבר ממלא את המסך, ולכן אצלנו: רק מסתירים את
+       מה שצף. לרוחב — הנגן של המערכת, כי רק הוא מסתובב לרוחב */
+    const wide = video && video.classList.contains('wide');
+    if (wide && !canElement && video.webkitEnterFullscreen) { try { video.webkitEnterFullscreen(); return; } catch (e) { /* נופלים למצב הממלא */ } }
     setImmersive(true);
     try {
       if (layer.requestFullscreen) await layer.requestFullscreen({ navigationUI: 'hide' });

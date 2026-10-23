@@ -129,15 +129,65 @@ export async function lookup(url, opts) {
 }
 
 /** רק הקובץ, לרענון לפני ניגון — כתובת של קובץ בפייסבוק פגה אחרי שעות.
+    full: הכתובת המלאה, כשכבר ידועה (קישור שיתוף של פייסבוק הוא הפניה).
     blocked: אינסטגרם לא מרשה לנגן את הסרטון מחוץ לה (ראה igMedia). */
-export async function refreshMedia(url) {
-  if (detectPlatform(url).id === 'instagram') {
+export async function refreshMedia(url, full) {
+  const platform = detectPlatform(url).id;
+  if (platform === 'instagram') {
     const ig = await igMedia(url);
     /* לא ענה — אין מה לחפש אצל השאר: og:video לא קיים באינסטגרם */
     return { media: ig.media, blocked: ig.blocked, full: null, log: ig.log };
   }
+  if (platform === 'facebook') {
+    const fb = await fbMedia(full || url);
+    if (fb.media) return { media: fb.media, blocked: false, full: null, log: fb.log };
+    const found = await lookup(url, { media: true });
+    /* קישור שיתוף בלי כתובת מלאה: החיפוש פתר אותה — עכשיו הנגן המשובץ */
+    if (!found.media && found.full && found.full !== full) {
+      const again = await fbMedia(found.full);
+      found.media = again.media;
+      fb.log.push(...again.log);
+    }
+    return { media: found.media, blocked: false, full: found.full, log: fb.log.concat(found.log) };
+  }
   const found = await lookup(url, { media: true });
   return { media: found.media, blocked: false, full: found.full, log: found.log };
+}
+
+/* --- פייסבוק: הקובץ מהנגן המשובץ ---
+   הנגן המשובץ של פייסבוק בונה באייפון <video> בלי playsinline ועם
+   playinfullscreen — כל ניגון בו נפתח בנגן של המערכת, בלי הנגן שלנו ובלי
+   המחוות. og:video אין, ולכן אף ספק לא מצא קובץ, והנגן נפל אליו תמיד (נבדק,
+   אוקטובר 2026). אבל הדף שלו (plugins/video.php) נושא את הקובץ עצמו:
+   "hd_src" ו-"sd_src", גם לרילס (/reel/<id>), H.264 עם התחלה מיידית, וה-CDN
+   מתיר ניגון מכל מקור. אותו מסלול כמו באינסטגרם: jina, X-Return-Format: html. */
+async function fbMedia(href) {
+  const out = { media: null, log: [] };
+  const page = embedUrl(href);
+  if (!page) { out.log.push('פייסבוק: אין כתובת מלאה'); return out; }
+  try {
+    const res = await withTimeout('https://r.jina.ai/' + page, TIMEOUT, { headers: { 'X-Return-Format': 'html' } });
+    if (!res.ok) { out.log.push('jina: ' + res.status); return out; }
+    out.media = fbSrc(await res.text());
+    out.log.push('jina: ' + (out.media ? 'קובץ' : 'בלי קובץ'));
+  } catch (e) {
+    out.log.push('jina: ' + reason(e));
+  }
+  return out;
+}
+
+/* "hd_src":"https:\/\/video…mp4?…" — מחרוזת JSON. HD קודם (720p): רואים בו
+   את הרגל על הכדור; SD הוא 360p */
+export function fbSrc(html) {
+  for (const key of ['hd_src', 'sd_src']) {
+    const m = html.match(new RegExp('"' + key + '":"((?:\\\\.|[^"\\\\])*)"'));
+    if (!m) continue;
+    try {
+      const file = JSON.parse('"' + m[1] + '"');
+      if (/^https:\/\//.test(file)) return file;
+    } catch (e) { /* מחרוזת פגומה — הבאה בתור */ }
+  }
+  return null;
 }
 
 /* --- אינסטגרם: הקובץ מהנגן המשובץ ---
