@@ -201,12 +201,12 @@ function docFile() {
 
 function readDoc() {
   var file = docFile();
-  if (!file) return { v: 2, updatedAt: 0, categories: [], videos: [] };
+  if (!file) return { v: 2, updatedAt: 0, categories: [], videos: [], sessions: [] };
   try {
     var parsed = JSON.parse(file.getBlob().getDataAsString('UTF-8'));
     if (parsed && parsed.videos && parsed.categories) return parsed;
   } catch (err) { /* קובץ פגום — מתחילים מחדש ולא מפילים את הכול */ }
-  return { v: 2, updatedAt: 0, categories: [], videos: [] };
+  return { v: 2, updatedAt: 0, categories: [], videos: [], sessions: [] };
 }
 
 function writeDoc(doc) {
@@ -247,6 +247,9 @@ function put(role, incoming) {
 function merge(base, incoming) {
   base.categories = mergeList(base.categories || [], incoming.categories || []);
   base.videos = mergeList(base.videos || [], incoming.videos || []);
+  /* האימונים — כדי שהיומן יגיע גם לטלפון של הצופה. בלי השורה הזו הסקריפט
+     שומר רק את מה שהוא מכיר, והאימונים היו נעלמים בדרך */
+  base.sessions = mergeList(base.sessions || [], incoming.sessions || []);
   return base;
 }
 

@@ -6,6 +6,7 @@ import { renderLibrary } from './library.js';
 import { mountQuiz, buildQuestions } from './quiz.js';
 import { mountLibrary } from './videolib.js';
 import { mountCategories } from './vcats.js';
+import { mountPlan, mountJournal } from './train.js';
 import { mountSync } from './sync.js';
 import { drawPack } from './packui.js';
 import { migrate } from './videos.js';
@@ -38,6 +39,9 @@ function parseHash() {
   /* האימון הקצר. התרחישים נבחרים בכל כניסה מחדש ולכן אינם בכתובת */
   if (parts[0] === 't' && parts[1]) return { view: 'train', id: parts[1] };
   if (parts[0] === 'v' && parts[1] === 'c') return { view: 'vcats' };
+  /* האימון האישי: האימון הקרוב, והיומן (train.js) */
+  if (parts[0] === 'v' && parts[1] === 'a') return { view: 'plan' };
+  if (parts[0] === 'v' && parts[1] === 'h') return { view: 'journal', id: parts[2] || null };
   if (parts[0] === 'v') return { view: 'videos' };
   if (parts[0] === 's') return { view: 'share' };
   /* קישור הצטרפות שנשלח בוואטסאפ. הכתובת וקוד הקריאה יושבים בתוכו,
@@ -139,7 +143,7 @@ async function boot() {
   }
 
   function screens(active) {
-    ['library', 'booklet', 'quiz', 'videos', 'vcats', 'share'].forEach(id => { $(id).hidden = id !== active; });
+    ['library', 'booklet', 'quiz', 'videos', 'vcats', 'plan', 'share'].forEach(id => { $(id).hidden = id !== active; });
   }
 
   /* --- הסרגל התחתון ---
@@ -160,7 +164,7 @@ async function boot() {
     });
     return byNum || booklets[0] || null;
   };
-  const TAB_OF = { library: 'home', booklet: 'book', quiz: 'quiz', train: 'quiz', videos: 'vid', vcats: 'vid', shared: 'book' };
+  const TAB_OF = { library: 'home', booklet: 'book', quiz: 'quiz', train: 'quiz', videos: 'vid', vcats: 'vid', plan: 'vid', journal: 'vid', shared: 'book' };
   function paintTabs(route) {
     const b = myBooklet();
     const set = (id, href) => {
@@ -196,6 +200,13 @@ async function boot() {
     if (route.view === 'vcats') {
       screens('vcats');
       current = mountCategories($('vcats'));
+      window.scrollTo(0, 0);
+      return;
+    }
+
+    if (route.view === 'plan' || route.view === 'journal') {
+      screens('plan');
+      current = route.view === 'plan' ? mountPlan($('plan')) : mountJournal($('plan'), route.id);
       window.scrollTo(0, 0);
       return;
     }

@@ -39,7 +39,8 @@ function emptyDoc() {
     v: DOC_VERSION,
     updatedAt: now(),
     categories: SEED.map((name, i) => ({ id: uid(), name, order: i, at: now(), updatedAt: now() })),
-    videos: []
+    videos: [],
+    sessions: []
   };
 }
 
@@ -52,12 +53,16 @@ function readDoc(key) {
     const raw = localStorage.getItem(key);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.categories) && Array.isArray(parsed.videos)) return parsed;
+      if (parsed && Array.isArray(parsed.categories) && Array.isArray(parsed.videos)) {
+        /* מסמך מלפני האימונים */
+        if (!Array.isArray(parsed.sessions)) parsed.sessions = [];
+        return parsed;
+      }
     }
   } catch (e) { /* מצב פרטי או מסמך פגום — מתחילים מחדש */ }
   /* המצטרף מתחיל ריק ולא עם קטגוריות משלו — הן יגיעו מהסנכרון */
   return key === SHARED_KEY
-    ? { v: DOC_VERSION, updatedAt: 0, categories: [], videos: [] }
+    ? { v: DOC_VERSION, updatedAt: 0, categories: [], videos: [], sessions: [] }
     : emptyDoc();
 }
 
@@ -144,9 +149,11 @@ function dataUrlToBlob(url) {
 function purgeTombstones(days) {
   const cutoff = now() - (days === undefined ? TOMB_DAYS : days) * 24 * 60 * 60 * 1000;
   const gone = doc.videos.filter(v => v.deleted && v.updatedAt < cutoff).map(v => v.id);
-  if (!gone.length && !doc.categories.some(c => c.deleted && c.updatedAt < cutoff)) return;
-  doc.videos = doc.videos.filter(v => !(v.deleted && v.updatedAt < cutoff));
-  doc.categories = doc.categories.filter(c => !(c.deleted && c.updatedAt < cutoff));
+  const old = x => x.deleted && x.updatedAt < cutoff;
+  if (!gone.length && !doc.categories.some(old) && !(doc.sessions || []).some(old)) return;
+  doc.videos = doc.videos.filter(v => !old(v));
+  doc.categories = doc.categories.filter(c => !old(c));
+  doc.sessions = (doc.sessions || []).filter(x => !old(x));
   gone.forEach(id => posters.drop(id));
 }
 
@@ -171,6 +178,7 @@ export function mergeInto(base, incoming) {
   };
   base.categories = merge(base.categories || [], incoming.categories || []);
   base.videos = merge(base.videos || [], incoming.videos || []);
+  base.sessions = merge(base.sessions || [], incoming.sessions || []);
   return { doc: base, changed };
 }
 
@@ -183,6 +191,7 @@ export function applyRemote(remote) {
     const same = doc.updatedAt === remote.updatedAt && doc.videos.length === remote.videos.length;
     doc = remote;
     doc.v = DOC_VERSION;
+    if (!Array.isArray(doc.sessions)) doc.sessions = [];
     save();
     return !same;
   }
@@ -571,3 +580,61 @@ export function isPortrait(url) {
   } catch (e) { /* כתובת פגומה — מסגרת רגילה */ }
   return false;
 }
+
+/* --- אימונים ---
+   האימון יושב באותו מסמך כמו הסרטונים: כך הוא מגיע לספרייה המשותפת ולטלפון
+   של הבן בלי מנגנון נוסף, וממוזג כמו סרטון — רשומה מול רשומה לפי updatedAt.
+   רשומה אחת לכל אימון, עם התרגילים בתוכה: status 'plan' — האימון הקרוב,
+   'done' — ביומן. תרגיל מחזיק את מזהה הסרטון, לא עותק שלו: השם, התמונה
+   והניגון באים מהספרייה, וההערה והמידה שלו שייכות לאימון הזה. */
+
+export function listSessions() {
+  return (doc.sessions || []).filter(x => !x.deleted);
+}
+
+export function getSession(id) {
+  return listSessions().find(x => x.id === id) || null;
+}
+
+/** האימון הקרוב — האחרון שנבנה ועוד לא נשמר ביומן */
+export function upcoming() {
+  return listSessions().filter(x => x.status === 'plan').sort((a, b) => b.at - a.at)[0] || null;
+}
+
+/** היומן, מהחדש לישן */
+export function journal() {
+  return listSessions().filter(x => x.status === 'done').sort((a, b) => (b.endedAt || b.at) - (a.endedAt || a.at));
+}
+
+export function newSession(fields) {
+  if (readOnly()) return null;
+  const x = Object.assign({ id: uid(), at: now(), updatedAt: now(), status: 'plan', title: '', date: '', goal: '', note: '', drills: [] }, fields);
+  (doc.sessions = doc.sessions || []).push(x);
+  save();
+  return x;
+}
+
+/** שמירה של האימון כולו. המיזוג הוא לפי אימון, ולכן כל שינוי — גם ציון של
+    תרגיל אחד — מעדכן את ה-updatedAt של האימון כולו. */
+export function putSession(x) {
+  if (readOnly() || !x) return null;
+  x.updatedAt = now();
+  const list = doc.sessions || (doc.sessions = []);
+  const i = list.findIndex(y => y.id === x.id);
+  if (i >= 0) list[i] = x; else list.push(x);
+  save();
+  return x;
+}
+
+export function removeSession(id) {
+  if (readOnly()) return false;
+  const x = (doc.sessions || []).find(y => y.id === id && !y.deleted);
+  if (!x) return false;
+  x.deleted = true;
+  x.updatedAt = now();
+  save();
+  return true;
+}
+
+/** מזהה לתרגיל בתוך אימון */
+export const newId = uid;
