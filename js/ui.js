@@ -96,10 +96,41 @@ const layers = [];
 let pendingBacks = 0;
 let waiting = [];
 
+/* כמה שכבות שנסגרות באותה נגיעה (⋯ ← עריכה: התפריט והנגן) — צעד אחד,
+   history.go(-n). שתי קריאות back() רצופות מתמזגות בסאפרי לצעד אחד, ואז
+   popstate השני לא הגיע לעולם: כל פתיחה חיכתה לו (afterLayers), והאפליקציה
+   נתקעה — העריכה לא נפתחה, וגם שום סרטון אחריה. ובכל מקרה: אם ה-popstate לא
+   מגיע תוך רגע, לא מחכים לו יותר. */
+let steps = 0;
+let rescue = 0;
+let ignore = 0;
+let ignoreUntil = 0;
+function stepBack() {
+  if (steps++) return;
+  Promise.resolve().then(() => {
+    const n = steps;
+    steps = 0;
+    pendingBacks++;
+    history.go(-n);
+    clearTimeout(rescue);
+    rescue = setTimeout(() => {
+      if (!pendingBacks) return;
+      /* אם בכל זאת יגיע באיחור — הוא לא "חזרה" של המשתמש */
+      ignore = pendingBacks;
+      ignoreUntil = Date.now() + 3000;
+      pendingBacks = 0;
+      release();
+    }, 700);
+  });
+}
+function release() { const run = waiting; waiting = []; run.forEach(fn => fn()); }
+
 window.addEventListener('popstate', () => {
+  if (ignore && Date.now() < ignoreUntil) { ignore--; return; }
+  ignore = 0;
   if (pendingBacks) {
     pendingBacks--;
-    if (!pendingBacks) { const run = waiting; waiting = []; run.forEach(fn => fn()); }
+    if (!pendingBacks) { clearTimeout(rescue); release(); }
     return;
   }
   const top = layers.pop();
@@ -107,7 +138,7 @@ window.addEventListener('popstate', () => {
 });
 
 export function afterLayers(fn) {
-  if (pendingBacks) waiting.push(fn); else fn();
+  if (pendingBacks || steps) waiting.push(fn); else fn();
 }
 
 /** פותח שכבה. close(fromBack) מסיר אותה מהמסך. מחזיר פונקציית סגירה. */
@@ -122,7 +153,7 @@ export function openLayer(remove) {
     if (!fromBack) {
       const i = layers.indexOf(layer);
       if (i >= 0) layers.splice(i, 1);
-      if (history.state && history.state.rcLayer) { pendingBacks++; history.back(); }
+      if (history.state && history.state.rcLayer) stepBack();
     }
   };
   lock();
