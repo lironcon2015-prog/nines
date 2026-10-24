@@ -267,9 +267,26 @@ export function mountPlan(root) {
     const lost = d.video && !v;
     const sub = d.note || (lost ? 'הסרטון נמחק מהספרייה' : '');
     const body = el('button.dbody', { type: 'button', disabled: viewer, onclick: () => editDrill(s, d, false, save) },
-      el('b', { text: nameOf(d) }), sub ? el('small', { text: sub }) : null);
-    r.append(body, el('span.meas.num', { text: measure(d) }));
+      el('b', { text: nameOf(d) }),
+      el('span.dline', null, el('span.meas.num', { text: measure(d) }), sub ? el('small', { text: sub }) : null));
+    r.append(body);
+    /* עריכה והוצאה גלויות בשורה: נגיעה בשם פתחה עורך, וההוצאה ישבה בתוכו —
+       ולא היה שום סימן שהן קיימות */
+    if (!viewer) {
+      r.append(
+        el('button.dact', { type: 'button', 'aria-label': 'עריכת ' + nameOf(d), onclick: () => editDrill(s, d, false, save) }, icon('pen')),
+        el('button.dact', { type: 'button', 'aria-label': 'הוצאת ' + nameOf(d) + ' מהאימון', onclick: () => removeDrill(d) }, icon('trash')));
+    }
     return r;
+  }
+
+  /* בלי "בטוח?": במגרש הידיים עסוקות, ו"ביטול" בהודעה מחזיר למקום */
+  function removeDrill(d) {
+    const i = s.drills.indexOf(d);
+    if (i < 0) return;
+    s.drills.splice(i, 1);
+    save(true);
+    toast('"' + nameOf(d) + '" הוצא מהאימון', { label: 'ביטול', run: () => { s.drills.splice(Math.min(i, s.drills.length), 0, d); save(true); } });
   }
 
   /* גרירה באצבע על הנקודות — כמו בקטגוריות (vcats.js) */
