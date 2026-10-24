@@ -144,6 +144,11 @@ async function boot() {
 
   function screens(active) {
     ['library', 'booklet', 'quiz', 'videos', 'vcats', 'plan', 'share'].forEach(id => { $(id).hidden = id !== active; });
+    /* מסך החוברת ממלא את המסך כולו — מגרש והנחיות יחד — ולכן בלי הסרגל
+       התחתון. ✕ שבכותרת מחזיר למסך הבית */
+    const book = active === 'booklet';
+    document.body.classList.toggle('on-booklet', book);
+    if (book) $('tabbar').hidden = true;
   }
 
   /* --- הסרגל התחתון ---
