@@ -129,6 +129,7 @@ function handle(body) {
       case 'get':     return out({ ok: true, doc: readDoc() });
       case 'put':     return out(put(role, body.doc));
       case 'preview': return out(preview(body.url));
+      case 'media':   return out(media(body.url));
       case 'poster':  return out(poster(role, body));
       default:        return out({ ok: false, error: 'פעולה לא מוכרת: ' + body.op });
     }
@@ -314,6 +315,78 @@ function link(html) {
 
 function decode(text) {
   return String(text).replace(/&amp;/g, '&').replace(/&#0?39;/g, "'").replace(/&quot;/g, '"');
+}
+
+/* ===================== הקובץ של הסרטון =====================
+   באינסטגרם ובפייסבוק אין og:video. הקובץ נמצא בנגן המשובץ שלהן — הדף שהן
+   מגישות לשיבוץ באתרים. האפליקציה משכה אותו דרך jina, שירות חינמי לכולם;
+   באוקטובר 2026 jina חסם את אינסטגרם לכל מי שאינו רשום ("due to previous
+   abuse" — של אחרים), והנגן נפל לנגן של אינסטגרם. הסקריפט הוא שרת שלך, ולכן
+   זה המסלול שלא נסגר בגלל אחרים.
+   נבדק מול הדפים האמיתיים: באינסטגרם הנתונים מגיעים רק לדפדפן של טלפון (לדפדפן
+   של מחשב הדף בלי contextJSON); בפייסבוק — למחשב יש hd_src ו-sd_src, ולטלפון
+   הדף מפנה ל-m.facebook.com ושם רק src (360p). */
+
+var PHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1';
+var DESK_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+
+function media(url) {
+  url = String(url || '');
+  if (/instagram\.com\//.test(url)) return igMedia_(url);
+  if (/facebook\.com\//.test(url)) return fbMedia_(url);
+  return { ok: false, error: 'רק אינסטגרם ופייסבוק' };
+}
+
+function page_(url, ua) {
+  var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true, headers: { 'User-Agent': ua } });
+  return res.getResponseCode() === 200 ? res.getContentText() : '';
+}
+
+/* contextJSON → gql_data.shortcode_media.video_url (בקרוסלה — בפריטים).
+   חסום (זכויות, כמעט תמיד על המוזיקה): אין קובץ, ו-copyright_blocked.
+   את זה לא עוקפים — רק אומרים מראש */
+function igMedia_(url) {
+  var m = url.match(/\/(?:p|reels?|tv)\/([^\/?#]+)/);
+  if (!m) return { ok: false, error: 'אין מזהה בכתובת' };
+  var html = page_('https://www.instagram.com/p/' + encodeURIComponent(m[1]) + '/embed/captioned/', PHONE_UA);
+  var raw = html.match(/"contextJSON":"((?:\\.|[^"\\])*)"/);
+  if (!raw) return { ok: true, media: null, blocked: false };
+  var data = JSON.parse(JSON.parse('"' + raw[1] + '"'));
+  var sm = data.gql_data && data.gql_data.shortcode_media;
+  var file = sm ? (sm.video_url || childVideo_(sm)) : null;
+  return { ok: true, media: file || null, blocked: !file && !!(data.context && data.context.copyright_blocked) };
+}
+
+function childVideo_(sm) {
+  var kids = (sm.edge_sidecar_to_children && sm.edge_sidecar_to_children.edges) || [];
+  for (var i = 0; i < kids.length; i++) {
+    if (kids[i] && kids[i].node && kids[i].node.video_url) return kids[i].node.video_url;
+  }
+  return null;
+}
+
+/* הנגן המשובץ לא הולך אחרי קישור שיתוף — הוא צריך את הכתובת המלאה, והאפליקציה
+   שולחת אותה כשהיא ידועה */
+function fbMedia_(url) {
+  var plugin = 'https://www.facebook.com/plugins/video.php?href=' + encodeURIComponent(url) + '&show_text=false';
+  var desk = page_(plugin, DESK_UA);
+  var file = mp4Field_(desk, 'hd_src') || mp4Field_(desk, 'sd_src');
+  if (!file) file = mp4Field_(page_(plugin, PHONE_UA).replace(/&quot;/g, '"').replace(/&amp;/g, '&'), 'src');
+  return { ok: true, media: file, blocked: false };
+}
+
+/* "key":"https:\/\/…mp4…" — מחרוזת JSON. רק כתובת של mp4: לשם "src" יש בדף גם
+   תמונות */
+function mp4Field_(html, key) {
+  var re = new RegExp('"' + key + '":"((?:\\\\.|[^"\\\\])*)"', 'g');
+  var m;
+  while ((m = re.exec(html))) {
+    try {
+      var value = JSON.parse('"' + m[1] + '"');
+      if (/^https:\/\//.test(value) && /\.mp4/.test(value)) return value;
+    } catch (e) { /* מחרוזת פגומה — הבאה בתור */ }
+  }
+  return null;
 }
 
 /* ===================== התמונות =====================

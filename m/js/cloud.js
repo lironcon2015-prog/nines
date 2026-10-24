@@ -225,6 +225,13 @@ export async function preview(url) {
   };
 }
 
+/** הקובץ של סרטון מאינסטגרם או מפייסבוק — הסקריפט מושך בעצמו את הנגן המשובץ
+    שלהן (ראה media ב-Code.gs). blocked: אינסטגרם לא מרשה לנגן מחוץ לה */
+export async function media(url) {
+  const out = await call('media', { url });
+  return { media: out.media || null, blocked: !!out.blocked };
+}
+
 /** מעלה תמונה לתיקייה ומחזירה מזהה קובץ, כדי שהמכשיר השני ימשוך אותה */
 export async function putPoster(id, blob) {
   if (isViewer()) return null;
