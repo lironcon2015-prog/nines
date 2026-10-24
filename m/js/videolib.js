@@ -15,7 +15,7 @@ import {
   posterCandidates, needsPoster, needsDownload, needsUpload, thumbUrl, normalizeUrl,
   readOnly, reload
 } from './videos.js';
-import { needsResolve, lookup, refreshMedia, fetchPoster } from './preview.js';
+import { needsResolve, lookup, refreshMedia, fetchPoster, whyNoFile } from './preview.js';
 import * as cloud from './cloud.js';
 import * as posters from './posters.js';
 import { state as sync, syncNow, onSync, autoOn } from './sync.js';
@@ -603,6 +603,9 @@ function buildPlayer(id, onClose) {
           fallback = embedUrl(got.full);
         }
         mode = fallback ? 'embed' : 'out';
+        /* הנגן שלהם במקום שלנו — אומרים למה, ומה פותר את זה */
+        const why = owner && whyNoFile(got.log, name);
+        if (why) toast(why);
       }
       paintCover();
     });

@@ -541,7 +541,13 @@ export function embedUrl(url) {
 const MEDIA_TTL = 3 * 60 * 60 * 1000;
 
 export function mediaFresh(video) {
-  return !!(video.media && Date.now() - (video.mediaAt || 0) < MEDIA_TTL);
+  if (!video.media) return false;
+  /* כתובת של אינסטגרם ופייסבוק נושאת את התפוגה שלה: oe, שניות בהקסדצימלי —
+     בדרך כלל ימים קדימה. עד חצי שעה לפניה לא מבקשים כתובת חדשה, וכך סרטון
+     שכבר נוגן ממשיך לנגן גם כשכל שירות בדרך חסום */
+  const oe = /[?&]oe=([0-9A-Fa-f]{8})(?:&|$)/.exec(video.media);
+  if (oe) return parseInt(oe[1], 16) * 1000 - Date.now() > 30 * 60 * 1000;
+  return Date.now() - (video.mediaAt || 0) < MEDIA_TTL;
 }
 
 /** הכתובת שהנגן מקבל: המלאה אם נפתחה, אחרת המקורית */

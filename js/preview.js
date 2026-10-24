@@ -162,9 +162,13 @@ export async function refreshMedia(url, full) {
    "hd_src" ו-"sd_src", גם לרילס (/reel/<id>), H.264 עם התחלה מיידית, וה-CDN
    מתיר ניגון מכל מקור. אותו מסלול כמו באינסטגרם: jina, X-Return-Format: html. */
 async function fbMedia(href) {
-  const out = { media: null, log: [] };
+  if (!embedUrl(href)) return { media: null, blocked: false, log: ['פייסבוק: אין כתובת מלאה'] };
+  return firstFile([viaScriptFile(href), fbJina(href)]);
+}
+
+async function fbJina(href) {
+  const out = { media: null, blocked: false, log: [] };
   const page = embedUrl(href);
-  if (!page) { out.log.push('פייסבוק: אין כתובת מלאה'); return out; }
   try {
     const res = await withTimeout('https://r.jina.ai/' + page, TIMEOUT, { headers: { 'X-Return-Format': 'html' } });
     if (!res.ok) { out.log.push('jina: ' + res.status); return out; }
@@ -202,6 +206,10 @@ export function fbSrc(html) {
    jina מחזיר את הדף כמו שהוא (X-Return-Format: html) ומתיר את הכותרת הזו
    מהמקור שלנו, בשנייה. allorigins ו-codetabs נפלו באותה בדיקה (522). */
 async function igMedia(url) {
+  return firstFile([viaScriptFile(url), igJina(url)]);
+}
+
+async function igJina(url) {
   const out = { media: null, blocked: false, log: [] };
   let id = null;
   try { const m = new URL(url).pathname.match(/\/(?:p|reels?|tv)\/([^/?#]+)/); id = m && m[1]; } catch (e) { /* כתובת פגומה */ }
@@ -234,6 +242,45 @@ function firstChildVideo(media) {
   const kids = (media.edge_sidecar_to_children && media.edge_sidecar_to_children.edges) || [];
   const hit = kids.find(k => k && k.node && k.node.video_url);
   return hit ? hit.node.video_url : null;
+}
+
+/* --- שני מסלולים לקובץ, ביחד ---
+   הסקריפט שלך — שרת שלך: אין לו מגבלת בקשות של אחרים, ואף אחד לא חוסם אותו
+   בגלל אחרים. jina — בלי הקמה, אבל שירות חינמי לכולם: באוקטובר 2026 הוא חסם
+   את אינסטגרם לכל מי שאינו רשום ("due to previous abuse"), והנגן נפל לנגן של
+   אינסטגרם. הראשון שמביא קובץ זוכה, בלי לחכות לאיטי — הסקריפט מתעורר לאט.
+   אף אחד לא הביא — "חסום" אם מישהו ראה חסימה של זכויות. */
+function firstFile(routes) {
+  const live = routes.filter(Boolean);
+  const log = [];
+  let left = live.length;
+  let blocked = false;
+  return new Promise(resolve => {
+    live.forEach(route => route.then(r => {
+      log.push(...r.log);
+      if (r.media) { resolve({ media: r.media, blocked: false, log }); return; }
+      blocked = blocked || !!r.blocked;
+      if (--left === 0) resolve({ media: null, blocked, log });
+    }));
+  });
+}
+
+/** למה הקובץ לא הגיע, במילים — כשהנגן נופל לנגן שלהם. null כשאין מה להציע */
+export function whyNoFile(log, name) {
+  if ((log || []).some(line => /פעולה לא מוכרת: media/.test(line))) {
+    return 'הסקריפט בדרייב צריך עדכון כדי לנגן כאן: פריסה ← ניהול פריסות ← עריכה ← גרסה חדשה';
+  }
+  if (!cloud.isOn()) return 'השירות החינמי שמביא את הקובץ חסום כרגע, ולכן הנגן של ' + name + '. חיבור לדרייב (⚙) פותר את זה לתמיד';
+  return null;
+}
+
+/** null כשאין סקריפט. סקריפט שעוד לא עודכן עונה "פעולה לא מוכרת: media" — וזה
+    מה שיופיע ביומן, כרמז לעדכן את הפריסה */
+function viaScriptFile(url) {
+  if (!cloud.isOn()) return null;
+  return cloud.media(url).then(
+    got => ({ media: got.media, blocked: got.blocked, log: ['הסקריפט שלך: ' + (got.media ? 'קובץ' : got.blocked ? 'חסום מחוץ לאינסטגרם' : 'בלי קובץ')] }),
+    e => ({ media: null, blocked: false, log: ['הסקריפט שלך: ' + reason(e)] }));
 }
 
 async function viaScript(url, out) {
