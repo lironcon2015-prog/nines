@@ -189,6 +189,7 @@ function resetRun(s) {
   s.endedAt = 0;
   s.totalSecs = 0;
   s.activeSecs = 0;
+  s.liveAt = 0;
   s.cur = 0;
   s.drills = s.drills.map(d => planOnly(d, true));
 }
@@ -605,21 +606,33 @@ function startLive(s, after) {
   /* זמן האימון נספר רק כשהמסך הזה פתוח. לפי שעון הקיר — מי שנכנס לבדוק ויצא
      ראה אחרי לילה "8 שעות" */
   let openedAt = Date.now();
+  /* האייפון סגר את האפליקציה כשהיא ברקע, והמסך הזה היה פתוח: הזמן מאז הדופק
+     האחרון הוא זמן אימון. יותר משלוש שעות — כבר לא אותו אימון */
+  if (s.liveAt) {
+    const gap = (Date.now() - s.liveAt) / 1000;
+    if (gap > 0 && gap < 3 * 3600) s.activeSecs = (s.activeSecs || 0) + gap;
+    s.liveAt = 0;
+  }
   const elapsed = () => (s.activeSecs || 0) + (Date.now() - openedAt) / 1000;
   const bank = () => { if (finished) return; s.activeSecs = elapsed(); openedAt = Date.now(); };
-  const store = () => { bank(); putSession(s); savedAt = Date.now(); };
+  const store = () => { bank(); if (!finished) s.liveAt = Date.now(); putSession(s); savedAt = Date.now(); };
   const close = openLayer(() => {
     clearInterval(timer);
     if (offKey) offKey();
     document.removeEventListener('visibilitychange', onVis);
     running = false;
     store();
+    /* יציאה ביד — מכאן הזמן לא נספר */
+    s.liveAt = 0;
+    putSession(s);
     syncNow();
     letSleep();
     layer.remove();
     if (after) after();
   });
-  const onVis = () => { if (document.visibilityState === 'visible') { last = Date.now(); keepAwake(); } };
+  /* חזרה מטלפון נעול או מאפליקציה אחרת: last לא מתאפס — התרגיל המשיך לרוץ
+     בזמן הזה, והטיק הבא משלים אותו (ואם נגמר — עובר הלאה) */
+  const onVis = () => { if (document.visibilityState === 'visible') keepAwake(); };
   document.addEventListener('visibilitychange', onVis);
   offKey = onEscape(() => close());
   keepAwake();
@@ -835,6 +848,8 @@ function startLive(s, after) {
     const dt = (t - last) / 1000;
     last = t;
     paintTotal();
+    /* דופק גם כשאף תרגיל לא רץ — הוא מה שמשחזר את הזמן אם האפליקציה נסגרה */
+    if (!finished && t - savedAt > 5000) store();
     if (!running || watching || finished) return;
     const was = cur().done;
     advance(dt);
@@ -852,6 +867,7 @@ function startLive(s, after) {
     clearInterval(timer);
     s.endedAt = Date.now();
     s.totalSecs = Math.round(s.activeSecs);
+    s.liveAt = 0;
     store();
     summary(s, layer, close);
   }
