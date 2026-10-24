@@ -42,15 +42,28 @@
   --menu-bg: rgba(255, 255, 255, .98);      /* תפריט ⋯ בנגן */
   --pitch-a: #E4EBF3;
   --pitch-b: #DBE3EE;
-  --pitch-line: rgba(15, 26, 43, .22);
+  --pitch-line: rgba(15, 26, 43, .24);
+  --pitch-edge: #D5DEE9;                   /* השוליים שמחוץ לקווים */
+  --fl1: rgba(255, 255, 255, .5);          /* אור באמצע המגרש */
+  --fl2: rgba(255, 255, 255, 0);
+  --net: rgba(15, 26, 43, .28);
+  /* אסימונים: אנחנו כחול כהה, היריב לבן ("מדי חוץ"), אתה זהב. אדום וירוק
+     שמורים לתוצאות, ולכן היריב אינו אדום */
+  --mate-1: #34507F; --mate-2: #15233C; --mate-ring: rgba(255, 255, 255, .95);
+  --opp-1: #FFFFFF; --opp-2: #D9E0EA;
+  --hero-1: #F7D872; --hero-2: #D9A21C;
+  --run: #CF970F;                          /* זהב כקו: כהה מהמילוי, שייראה על דשא בהיר */
+  --mrun: #2C4470;
+  --ghost: rgba(15, 26, 43, .4);
+  --ball-line: #0F1A2B;
   --our-fill: #1B2B44;
   --our-ring: rgba(27, 43, 68, .25);
   --our-text: #FFFFFF;
-  --opp-ring: rgba(15, 26, 43, .5);
+  --opp-ring: rgba(15, 26, 43, .55);
   --opp-fill: rgba(15, 26, 43, .06);
   --ball: #0F1A2B;
   --pass: rgba(15, 26, 43, .62);
-  --press: rgba(15, 26, 43, .38);
+  --press: rgba(15, 26, 43, .5);
   --scrim: rgba(15, 26, 43, .42);
   --r-card: 22px;
   --r-tile: 18px;
@@ -95,14 +108,25 @@
   --menu-bg: rgba(28, 38, 56, .97);
   --pitch-a: rgba(23, 35, 52, .92);
   --pitch-b: rgba(19, 30, 45, .92);
-  --pitch-line: rgba(255, 255, 255, .15);
+  --pitch-line: rgba(255, 255, 255, .17);
+  --pitch-edge: #0D1724;
+  --fl1: rgba(130, 175, 240, .1);
+  --fl2: rgba(130, 175, 240, 0);
+  --net: rgba(255, 255, 255, .22);
+  --mate-1: #4A88DE; --mate-2: #1F4F98; --mate-ring: rgba(255, 255, 255, .85);
+  --opp-1: #CDD5E1; --opp-2: #8693A8;
+  --hero-1: #F8DA78; --hero-2: #DDA823;
+  --run: #E8B931;
+  --mrun: #8FC2FA;
+  --ghost: rgba(232, 237, 245, .45);
+  --ball-line: #0A1321;
   --our-ring: rgba(109, 179, 245, .6);
   --our-text: #E8EDF5;
-  --opp-ring: rgba(232, 237, 245, .42);
+  --opp-ring: rgba(10, 18, 30, .6);
   --opp-fill: rgba(0, 0, 0, .12);
   --ball: #FFFFFF;
   --pass: rgba(232, 237, 245, .75);
-  --press: rgba(232, 237, 245, .38);
+  --press: rgba(232, 237, 245, .55);
   --scrim: rgba(3, 6, 12, .62);
   color-scheme: dark;
 }
@@ -325,57 +349,133 @@ h1, h2, h3 { margin: 0; font-weight: 700; letter-spacing: -.01em; line-height: 1
 .seg button[aria-pressed="true"] { color: var(--gold-text); background: var(--gold-soft); border-color: var(--gold-line); }
 
 .board { position: relative; margin-top: .7rem; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
-svg.pitch { display: block; width: 100%; height: auto; border-radius: 20px; border: 1px solid var(--line-strong); background: var(--pitch-a); }
-.board > .playrow { position: absolute; top: 10px; inset-inline-end: 10px; }
-.play { height: 34px; padding: 0 .85rem; border-radius: 999px; display: inline-flex; align-items: center; gap: .4rem; font-size: .8rem; font-weight: 700; border: 1px solid var(--glass-rim); }
-.play::before { content: ''; width: 0; height: 0; border-style: solid; border-width: 5px 8px 5px 0; border-color: transparent var(--gold) transparent transparent; }
-.play:disabled { opacity: .6; }
-.legend { display: flex; flex-wrap: wrap; gap: .3rem .9rem; margin-top: .55rem; font-size: .74rem; color: var(--faint); font-weight: 600; }
-.legend > span { display: inline-flex; align-items: center; gap: .3rem; }
-.sw { display: inline-block; width: 11px; height: 11px; border-radius: 50%; }
-.sw-me { background: var(--gold); box-shadow: 0 0 6px var(--gold); }
-.sw-our { background: var(--our-fill); border: 1.5px solid var(--our-ring); }
-.sw-opp { border: 1.5px solid var(--opp-ring); }
-.sw-run, .sw-pass { width: 16px; height: 0; border-radius: 0; }
-.sw-run { border-top: 2.5px solid var(--gold); }
-.sw-pass { border-top: 2px dashed var(--pass); }
-.sw-ghost { border: 1.5px dashed var(--gold-line); }
+svg.pitch { display: block; width: 100%; height: auto; border-radius: 20px; border: 1px solid var(--line-strong); background: var(--pitch-edge); }
 
-/* המגרש — אותם צבעים כמו לוח הלייב בגבעתיים */
+/* ── לוח ההרצה: המגרש ופס השליטה הם כרטיס אחד ─────────────────────── */
+/* הרקע של הכרטיס הוא צבע השוליים של המגרש: כשהמגרש מתכווץ לגובה המסך
+   (מחשב, טלפון נמוך) מה שמסביבו נראה כהמשך של המגרש ולא כחור */
+.board.has-bar { border-radius: 22px; border: 1px solid var(--line-strong); background: var(--pitch-edge); overflow: hidden; box-shadow: 0 10px 28px rgba(15, 26, 43, .08); }
+/* בטלפון נמוך המגרש מתכווץ כדי שהמגרש והפס ייכנסו יחד מעל הפס הצף —
+   אחרת ההרצה רצה כשחצי ממנה מוסתר */
+.board.has-bar svg.pitch { border: 0; border-radius: 0; width: auto; max-width: 100%; margin: 0 auto;
+  max-height: calc(100svh - var(--tab-space) - 54px - 148px); cursor: pointer; }
+.board.has-bar.still svg.pitch { cursor: default; }
+.board.has-bar.still { overflow: visible; border: 0; background: none; box-shadow: none; }
+.board.has-bar.still svg.pitch { border: 1px solid var(--line-strong); border-radius: 20px; max-height: none; width: 100%; }
+
+.pbar { padding: .55rem .7rem .7rem; border-top: 1px solid var(--line); display: grid; gap: .45rem; background: var(--surface-solid); }
+.pcap { display: flex; align-items: center; gap: .5rem; min-height: 1.6rem; font-size: .92rem; font-weight: 700; color: var(--text); line-height: 1.3; }
+.pbar.idle .pcap { color: var(--faint); font-weight: 600; font-size: .86rem; }
+.pstep { flex: none; min-width: 1.9rem; height: 1.45rem; padding: 0 .4rem; border-radius: 999px; display: inline-grid; place-items: center;
+  font-family: Rubik, sans-serif; font-size: .74rem; font-weight: 600; color: var(--on-gold); background: linear-gradient(180deg, var(--gold-hi), var(--gold-lo)); }
+.pbar[data-state="ended"] .pstep { background: var(--gold-soft); color: var(--gold-text); box-shadow: inset 0 0 0 1px var(--gold-line); }
+
+.pctl { display: flex; align-items: center; gap: .6rem; }
+.pplay { flex: none; width: 46px; height: 46px; border-radius: 50%; border: 0; display: grid; place-items: center; color: var(--on-gold);
+  background: linear-gradient(180deg, var(--gold-hi), var(--gold-lo)); box-shadow: 0 4px 14px var(--gold-glow), inset 0 1px 0 rgba(255, 255, 255, .5); }
+.pplay svg { width: 22px; height: 22px; }
+/* במשפחת RTL ▶ מצביע ימינה כמו בכל נגן — סימן ההפעלה אינו מתהפך */
+.pbar[data-state="idle"] .pplay svg, .pbar[data-state="paused"] .pplay svg { margin-left: 3px; }
+/* עד הפעם הראשונה: הכפתור נושם, כדי שילד שלא יודע שאפשר להריץ יגלה */
+.board:not(.seen) .pbar[data-state="idle"] .pplay { animation: breathe 2.2s ease-in-out infinite; }
+@keyframes breathe { 0%, 100% { box-shadow: 0 4px 14px var(--gold-glow), 0 0 0 0 var(--gold-glow); } 50% { box-shadow: 0 4px 14px var(--gold-glow), 0 0 0 9px rgba(227, 176, 39, 0); } }
+
+.ptrack { position: relative; flex: 1; height: 30px; display: flex; align-items: center; }
+/* הזמן זורם מימין לשמאל, כמו כל השאר בממשק. לא dir="rtl" על הפקד —
+   לא כל דפדפן הופך אותו — אלא פקד רגיל שמשוקף, וזה עובד בכולם */
+.pseek { -webkit-appearance: none; appearance: none; width: 100%; height: 30px; margin: 0; background: none; cursor: pointer; position: relative; z-index: 1; touch-action: none; transform: scaleX(-1); }
+.pseek::-webkit-slider-runnable-track { height: 6px; border-radius: 6px; background: linear-gradient(to right, var(--gold) var(--p, 0%), var(--surface-2) var(--p, 0%)); box-shadow: inset 0 0 0 1px var(--line); }
+.pseek::-moz-range-track { height: 6px; border-radius: 6px; background: linear-gradient(to right, var(--gold) var(--p, 0%), var(--surface-2) var(--p, 0%)); }
+.pseek::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -6px; border-radius: 50%; background: var(--surface-solid); border: 2px solid var(--gold); box-shadow: 0 2px 6px rgba(15, 26, 43, .25); }
+.pseek::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--surface-solid); border: 2px solid var(--gold); }
+.pbar.idle .pseek::-webkit-slider-thumb { border-color: var(--line-strong); }
+/* תחילת כל שלב על הציר */
+.pticks { position: absolute; inset-inline: 9px; top: 50%; height: 0; pointer-events: none; z-index: 2; }
+.pticks i { position: absolute; top: -4px; width: 2px; height: 8px; margin-inline-start: -1px; border-radius: 2px; background: var(--surface-solid); box-shadow: 0 0 0 1px var(--line-strong); }
+.pspeed { flex: none; height: 32px; padding: 0 .75rem; border-radius: 999px; font-size: .8rem; font-weight: 700; color: var(--faint); background: var(--surface-2); border: 1px solid var(--line); }
+.pspeed[aria-pressed="true"] { color: var(--gold-text); background: var(--gold-soft); border-color: var(--gold-line); }
+
+.pvar { display: flex; align-items: center; gap: .5rem; font-size: .82rem; font-weight: 700; color: var(--muted); }
+.pvar .seg button { min-width: 2.6rem; font-family: Rubik, sans-serif; font-size: .82rem; }
+
+/* אישור לנגיעה במגרש */
+.pflash { position: absolute; left: 50%; top: 42%; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(8, 12, 20, .5); color: #fff; opacity: 0; pointer-events: none; transform: scale(.8); }
+.pflash svg { width: 28px; height: 28px; }
+.pflash.on { animation: pflash .55s ease-out; }
+@keyframes pflash { 0% { opacity: 0; transform: scale(.8); } 25% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.15); } }
+
+.legend { display: flex; flex-wrap: wrap; gap: .35rem .85rem; margin-top: .6rem; font-size: .74rem; color: var(--faint); font-weight: 600; }
+.legend > span { display: inline-flex; align-items: center; gap: .32rem; }
+.lsw { width: 14px; height: 14px; flex: none; overflow: visible; }
+.lsw.wide { width: 22px; height: 11px; }
+.lsw .arrow { stroke-width: 2.4; }
+.lsw .ghost { stroke-width: 1.5; }
+.lg-hero { fill: var(--hero-2); stroke: rgba(255, 255, 255, .8); stroke-width: 1.2; }
+.lg-mate { fill: var(--mate-2); stroke: rgba(255, 255, 255, .8); stroke-width: 1.2; }
+.lg-opp { fill: var(--opp-1); stroke: var(--opp-ring); stroke-width: 1.4; }
+
+/* המגרש — אותם צבעים כמו לוח הלייב בגבעתיים, עם עומק: שוליים כהים,
+   אור באמצע, צל מתחת לכל אסימון */
+.edge { fill: var(--pitch-edge); }
 .field { fill: var(--pitch-a); }
 .stripe { fill: var(--pitch-b); }
-.pl { fill: none; stroke: var(--pitch-line); stroke-width: 1.4; }
-.pdot { fill: var(--pitch-line); }
-.head-hp { fill: var(--gold); }
+.fl1 { stop-color: var(--fl1); }
+.fl2 { stop-color: var(--fl2); }
+.pl { fill: none; stroke: var(--pitch-line); stroke-width: 1.5; stroke-linecap: round; }
+.pdot { fill: var(--pitch-line); stroke: none; }
+.goal { stroke: var(--pitch-line); stroke-width: 1.4; }
+.netl { fill: none; stroke: var(--net); stroke-width: .7; }
+.head-hp { fill: var(--run); }
 .head-hb { fill: var(--pass); }
 .head-hg { fill: var(--press); }
-.tok { transition: transform .68s cubic-bezier(.6, .02, .2, 1); }
+.head-hm { fill: var(--mrun); }
+.tok, .opp { transition: transform .68s cubic-bezier(.6, .02, .2, 1); }
+.tc { stroke-width: 1.6; }
 .tok text { font-family: Rubik, Assistant, sans-serif; font-weight: 700; font-size: 13.5px; text-anchor: middle; dominant-baseline: central; }
-.mate circle { fill: var(--our-fill); stroke: var(--our-ring); stroke-width: 2; }
-.mate text { fill: var(--our-text); }
+.mate .tc { stroke: var(--mate-ring); }
+.mate text { fill: #FFFFFF; }
 /* אתה: זהב זוהר. העין מוצאת אותך ראשון בכל תרחיש */
-.eight circle { fill: url(#gold-fill); stroke: rgba(255, 255, 255, .55); stroke-width: 2; filter: drop-shadow(0 0 6px rgba(232, 185, 49, .7)); }
-.eight text { fill: #1A1204; }
-.opp circle { fill: none; stroke: var(--opp-ring); stroke-width: 2; }
-.oppfill { fill: var(--opp-fill); }
-.ball { fill: var(--ball); }
+.eight .tc { stroke: rgba(255, 255, 255, .9); stroke-width: 2; }
+.eight { filter: drop-shadow(0 0 6px var(--gold-glow)); }
+.eight text { fill: #1A1204; font-size: 14.5px; }
+.opp .tc { stroke: var(--opp-ring); stroke-width: 1.8; }
+.tg-m1 { stop-color: var(--mate-1); } .tg-m2 { stop-color: var(--mate-2); }
+.tg-o1 { stop-color: var(--opp-1); } .tg-o2 { stop-color: var(--opp-2); }
+.tg-h1 { stop-color: var(--hero-1); } .tg-h2 { stop-color: var(--hero-2); }
+.ball { fill: #FFFFFF; stroke: var(--ball-line); stroke-width: 1.3; }
+.ball-pat { fill: var(--ball-line); }
+.ball-sh { fill: rgba(6, 11, 20, .32); }
 .zone { fill: var(--gold-soft); stroke: var(--gold-line); stroke-width: 1.4; stroke-dasharray: 6 5; }
 .shadow { fill: var(--surface-2); }
-.ghost { fill: none; stroke: var(--gold-line); stroke-width: 1.8; stroke-dasharray: 4 4; }
+.ghost { fill: none; stroke: var(--ghost); stroke-width: 1.7; stroke-dasharray: 4 3.5; }
+.gn { font-family: Rubik, sans-serif; font-weight: 600; font-size: 11px; fill: var(--ghost); text-anchor: middle; dominant-baseline: central; }
+.og .ghost { stroke: var(--press); }
 .arrow { fill: none; stroke-linecap: round; }
-.a-run { stroke: var(--gold); stroke-width: 2.8; }
-.a-pass { stroke: var(--pass); stroke-width: 2; stroke-dasharray: 7 6; }
-.a-opt { stroke: var(--gold); stroke-width: 2.2; stroke-dasharray: 3 6; opacity: .85; }
-.a-press { stroke: var(--press); stroke-width: 2; stroke-dasharray: 2 5; }
-/* טקסט בתוך המגרש נמדד ביחידות ה-viewBox: ~0.9 פיקסל ליחידה בטלפון */
-.alabel { font-family: Assistant, sans-serif; font-weight: 700; font-size: 13px; fill: var(--gold-text); }
-.zlabel { font-family: Assistant, sans-serif; font-weight: 700; font-size: 12.5px; fill: var(--gold-text); }
+.a-run { stroke: var(--run); stroke-width: 3; }
+.a-mrun { stroke: var(--mrun); stroke-width: 2.6; }
+.a-pass { stroke: var(--pass); stroke-width: 2.2; stroke-dasharray: 7 6; }
+.a-opt { stroke: var(--run); stroke-width: 2.4; stroke-dasharray: 2.5 5.5; }
+.a-press { stroke: var(--press); stroke-width: 2.2; stroke-dasharray: 2 5; }
+.a-mpress { stroke: var(--mrun); stroke-width: 2.2; stroke-dasharray: 2 5; }
+/* תוויות האפשרויות: עיגול זהב עם אות, על הקשת */
+.abadge circle { fill: var(--hero-2); stroke: rgba(255, 255, 255, .9); stroke-width: 1.4; }
+.abadge text { font-family: Rubik, sans-serif; font-weight: 700; font-size: 11px; fill: #1A1204; text-anchor: middle; dominant-baseline: central; }
+/* טקסט בתוך המגרש נמדד ביחידות ה-viewBox: ~0.9 פיקסל ליחידה בטלפון.
+   הילה בצבע הדשא מאחורי האותיות — קריא גם כשהוא חוצה קו */
+.zlabel { font-family: Assistant, sans-serif; font-weight: 700; font-size: 12.5px; fill: var(--gold-text); stroke: var(--pitch-a); stroke-width: 3.5; stroke-linejoin: round; paint-order: stroke; }
 .draw { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); animation: draw .62s cubic-bezier(.3, .7, .3, 1) forwards; }
-.a-pass.draw, .a-opt.draw, .a-press.draw { stroke-dashoffset: 0; opacity: 0; animation: fadein .5s forwards; }
+.a-pass.draw, .a-opt.draw, .a-press.draw, .a-mpress.draw { stroke-dashoffset: 0; opacity: 0; animation: fadein .5s forwards; }
 @keyframes draw { to { stroke-dashoffset: 0; } }
 @keyframes fadein { to { opacity: 1; } }
 .fade { opacity: 0; animation: fadein .45s .1s forwards; }
-.playing .tok { transition: none; }
+
+/* בזמן הרצה התנועה מגיעה מ-JS פריים אחר פריים, ומעבר CSS רק היה מאחר אותה */
+.movie .tok, .movie .opp { transition: none; }
+.arrow.aside { opacity: .55; }
+.arrow.dim, .abadge.dim { opacity: .22; }
+.halo { fill: none; stroke: var(--run); stroke-width: 2; opacity: 0; }
+.ripple { fill: none; stroke: var(--pass); stroke-width: 1.6; opacity: 0; }
 svg.pitch.mini { border: 0; border-radius: 0; }
 
 /* פאנל ההסבר */
@@ -713,7 +813,7 @@ details.box > summary { cursor: pointer; font-weight: 700; color: var(--gold-tex
 :where(button, a[href]):active { transform: scale(.97); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
-  .tok { transition: none; }
+  .tok, .opp { transition: none; }
   .draw, .fade { opacity: 1; stroke-dashoffset: 0; }
 }
 
