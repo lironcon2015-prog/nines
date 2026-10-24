@@ -135,20 +135,62 @@ export function planCard() {
   };
 }
 
-function duplicate(from) {
-  const drills = from.drills.map(d => {
-    const c = { id: newId() };
-    PLAN_KEYS.forEach(k => { c[k] = d[k]; });
-    return c;
-  });
+/* תרגיל בלי מה שקרה בו: רק המה, לא התוצאה */
+function planOnly(d, keepId) {
+  const c = { id: keepId ? d.id : newId() };
+  PLAN_KEYS.forEach(k => { c[k] = d[k]; });
+  return c;
+}
+
+/** add: מוסיפים לאימון הקרוב; אחרת — הוא נבנה מחדש מהאימון הזה */
+function duplicate(from, add) {
+  const drills = from.drills.map(d => planOnly(d));
   const plan = upcoming();
   if (plan) {
-    plan.drills = drills;
-    plan.goal = from.goal || '';
+    if (add) plan.drills.push(...drills);
+    else {
+      plan.drills = drills;
+      plan.goal = from.goal || '';
+      if (plan.startedAt) resetRun(plan);
+    }
     putSession(plan);
     return plan;
   }
   return newSession({ date: today(), goal: from.goal || '', drills });
+}
+
+/** שכפול לאימון הקרוב. יש בו כבר תרגילים — שואלים: להוסיף, או במקומם */
+function copyInto(from, after) {
+  const plan = upcoming();
+  const go = add => { duplicate(from, add); syncNow(); toast(add ? 'התרגילים נוספו לאימון הקרוב' : 'האימון הקרוב מוכן לעריכה'); if (after) after(); };
+  if (!plan || !plan.drills.length) { go(false); return; }
+  sheet('שכפול לאימון הקרוב', (body, close) => {
+    body.append(
+      el('p.hint', { text: 'ב"' + titleOf(plan) + '" יש כבר ' + plan.drills.length + ' תרגילים. מה לעשות עם ' + from.drills.length + ' התרגילים של ' + titleOf(from) + ' ' + shortDate(from.date) + '?' }),
+      el('button.btn.gold.wide', { type: 'button', text: 'להוסיף אותם', onclick: () => { close(); go(true); } }),
+      el('button.btn.wide', { type: 'button', text: 'במקום מה שיש', onclick: () => { close(); go(false); } }));
+  });
+}
+
+/** מאיזה אימון ביומן לשכפל */
+function pickPast(past, after) {
+  sheet('שכפול מאימון קודם', (body, close) => {
+    const list = el('div.rows');
+    past.slice(0, 12).forEach(x => list.appendChild(el('button.mr.jpick', { type: 'button', onclick: () => { close(); afterLayers(() => copyInto(x, after)); } },
+      el('span.jdate.num', { text: shortDate(x.date) }),
+      el('span.name', null, el('b', { text: titleOf(x) }), el('small', { text: x.drills.length + ' תרגילים' + (x.goal ? ' · ' + x.goal : '') })))));
+    body.appendChild(list);
+  });
+}
+
+/** חזרה לפני האימון: בלי זמנים ובלי תוצאות, אותם תרגילים */
+function resetRun(s) {
+  s.startedAt = 0;
+  s.endedAt = 0;
+  s.totalSecs = 0;
+  s.activeSecs = 0;
+  s.cur = 0;
+  s.drills = s.drills.map(d => planOnly(d, true));
 }
 
 function pageHead(ic, title, sub) {
@@ -218,6 +260,17 @@ export function mountPlan(root) {
       root.appendChild(el('button.btn.gold.wide.plan-go', { type: 'button', disabled: !n, onclick: () => startLive(s, paint) },
         icon('play'), live ? 'להמשיך את האימון' : 'להתחיל אימון'));
     }
+    if (s.startedAt) {
+      /* נכנסו לבדוק, או שהאימון נקטע — מאפסים זמנים ותוצאות, והתרגילים נשארים */
+      const again = el('button.btn.quiet.sm', { type: 'button', text: 'להתחיל מחדש' });
+      again.onclick = () => {
+        if (!again.classList.contains('sure')) { again.classList.add('sure'); again.textContent = 'לאפס את הזמנים והתוצאות? לחיצה נוספת'; return; }
+        resetRun(s);
+        save(true);
+        toast('האימון אופס — אפשר להתחיל מההתחלה');
+      };
+      root.appendChild(again);
+    }
     const del = el('button.btn.quiet.sm', { type: 'button', text: sureDelete ? 'למחוק את האימון? לחיצה נוספת מוחקת' : 'מחיקת האימון' });
     del.onclick = () => {
       if (!sureDelete) { sureDelete = true; del.textContent = 'למחוק את האימון? לחיצה נוספת מוחקת'; return; }
@@ -227,7 +280,11 @@ export function mountPlan(root) {
       toast('האימון נמחק');
       paint();
     };
-    root.appendChild(el('div.plan-foot', null, el('a.btn.quiet.sm', { href: '#/v/h' }, icon('cup'), 'יומן האימונים'), del));
+    const past = journal();
+    root.appendChild(el('div.plan-foot', null,
+      el('a.btn.quiet.sm', { href: '#/v/h' }, icon('cup'), 'יומן האימונים'),
+      past.length ? el('button.btn.quiet.sm', { type: 'button', text: 'שכפול מאימון קודם', onclick: () => pickPast(past, paint) }) : null,
+      del));
   }
 
   function addButtons() {
@@ -246,7 +303,7 @@ export function mountPlan(root) {
       root.appendChild(addButtons());
       const last = journal()[0];
       if (last) {
-        root.appendChild(el('button.btn', { type: 'button', onclick: () => { duplicate(last); syncNow(); paint(); } },
+        root.appendChild(el('button.btn', { type: 'button', onclick: () => copyInto(last, paint) },
           icon('sync'), 'לבנות מהאימון האחרון — ' + titleOf(last)));
       }
     }
@@ -256,28 +313,69 @@ export function mountPlan(root) {
   function drillRow(d) {
     const v = d.video ? getVideo(d.video) : null;
     const r = el('div.mr.drill', { 'data-id': d.id });
+    const slide = el('div.dslide');
     const grip = el('button.grip', { type: 'button', 'aria-label': 'גרירה לשינוי הסדר' }, icon('grip'));
     if (viewer) grip.style.visibility = 'hidden'; else wireDrag(grip, r);
     const thumb = v ? videoThumb(v) : el('div.pv.none', null, icon(d.kind === 'challenge' ? 'cup' : 'watch'));
     thumb.classList.add('dthumb');
     if (v) {
       const play = el('button.dplay', { type: 'button', 'aria-label': 'צפייה בסרטון', onclick: () => openVideo(v.id) }, thumb);
-      r.append(grip, play);
-    } else r.append(grip, thumb);
+      slide.append(grip, play);
+    } else slide.append(grip, thumb);
     const lost = d.video && !v;
     const sub = d.note || (lost ? 'הסרטון נמחק מהספרייה' : '');
     const body = el('button.dbody', { type: 'button', disabled: viewer, onclick: () => editDrill(s, d, false, save) },
       el('b', { text: nameOf(d) }),
       el('span.dline', null, el('span.meas.num', { text: measure(d) }), sub ? el('small', { text: sub }) : null));
-    r.append(body);
-    /* עריכה והוצאה גלויות בשורה: נגיעה בשם פתחה עורך, וההוצאה ישבה בתוכו —
-       ולא היה שום סימן שהן קיימות */
+    slide.append(body);
+    r.append(slide);
     if (!viewer) {
-      r.append(
-        el('button.dact', { type: 'button', 'aria-label': 'עריכת ' + nameOf(d), onclick: () => editDrill(s, d, false, save) }, icon('pen')),
-        el('button.dact', { type: 'button', 'aria-label': 'הוצאת ' + nameOf(d) + ' מהאימון', onclick: () => removeDrill(d) }, icon('trash')));
+      r.prepend(el('button.ddel', { type: 'button', 'aria-label': 'הוצאת ' + nameOf(d) + ' מהאימון', onclick: () => removeDrill(d) }, 'מחיקה'));
+      wireSwipe(r, slide);
     }
     return r;
+  }
+
+  /* גרירה שמאלה חושפת "מחיקה", כמו ברשימות באייפון. רק תנועה אופקית ברורה
+     נחשבת — אחרת גלילה של הדף הייתה פותחת שורות */
+  const OPEN = 88;
+  let openRow = null;
+  const shut = row => { if (!row) return; row.classList.remove('open'); row.querySelector('.dslide').style.transform = ''; if (openRow === row) openRow = null; };
+  function wireSwipe(r, slide) {
+    let x0 = 0, y0 = 0, dx = 0, base = 0, mode = null;
+    slide.addEventListener('pointerdown', e => {
+      if (e.button || e.target.closest('.grip')) return;
+      if (openRow && openRow !== r) shut(openRow);
+      x0 = e.clientX; y0 = e.clientY; dx = 0; mode = null;
+      base = r.classList.contains('open') ? -OPEN : 0;
+    });
+    slide.addEventListener('pointermove', e => {
+      if (mode === 'no' || !x0) return;
+      const mx = e.clientX - x0, my = e.clientY - y0;
+      if (!mode) {
+        if (Math.abs(mx) < 8 && Math.abs(my) < 8) return;
+        mode = Math.abs(mx) > Math.abs(my) * 1.3 ? 'swipe' : 'no';
+        if (mode === 'no') return;
+        slide.setPointerCapture(e.pointerId);
+        r.classList.add('swiping');
+      }
+      dx = Math.max(-OPEN - 20, Math.min(0, base + mx));
+      slide.style.transform = 'translateX(' + dx + 'px)';
+    });
+    const end = () => {
+      x0 = 0;
+      if (mode !== 'swipe') return;
+      r.classList.remove('swiping');
+      if (dx < -OPEN / 2) { r.classList.add('open'); slide.style.transform = 'translateX(' + -OPEN + 'px)'; openRow = r; }
+      else shut(r);
+    };
+    slide.addEventListener('pointerup', end);
+    slide.addEventListener('pointercancel', end);
+    /* הנגיעה שסיימה גרירה אינה פותחת עורך; ונגיעה בשורה פתוחה — סוגרת אותה */
+    slide.addEventListener('click', e => {
+      if (mode === 'swipe' || r.classList.contains('open')) { e.stopPropagation(); e.preventDefault(); if (mode !== 'swipe') shut(r); }
+      mode = null;
+    }, true);
   }
 
   /* בלי "בטוח?": במגרש הידיים עסוקות, ו"ביטול" בהודעה מחזיר למקום */
@@ -504,7 +602,12 @@ function startLive(s, after) {
   let finished = false;
   let refresh = null;
 
-  const store = () => { putSession(s); savedAt = Date.now(); };
+  /* זמן האימון נספר רק כשהמסך הזה פתוח. לפי שעון הקיר — מי שנכנס לבדוק ויצא
+     ראה אחרי לילה "8 שעות" */
+  let openedAt = Date.now();
+  const elapsed = () => (s.activeSecs || 0) + (Date.now() - openedAt) / 1000;
+  const bank = () => { if (finished) return; s.activeSecs = elapsed(); openedAt = Date.now(); };
+  const store = () => { bank(); putSession(s); savedAt = Date.now(); };
   const close = openLayer(() => {
     clearInterval(timer);
     if (offKey) offKey();
@@ -533,7 +636,7 @@ function startLive(s, after) {
   document.body.appendChild(layer);
 
   const cur = () => s.drills[s.cur];
-  const paintTotal = () => { totalEl.textContent = clock((Date.now() - s.startedAt) / 1000); };
+  const paintTotal = () => { totalEl.textContent = clock(elapsed()); };
 
   function paint() {
     if (finished) return;
@@ -743,11 +846,12 @@ function startLive(s, after) {
   }
 
   function finishSession() {
+    bank();
     finished = true;
     running = false;
     clearInterval(timer);
     s.endedAt = Date.now();
-    s.totalSecs = Math.round((s.endedAt - s.startedAt) / 1000);
+    s.totalSecs = Math.round(s.activeSecs);
     store();
     summary(s, layer, close);
   }
@@ -911,19 +1015,8 @@ export function mountJournal(root, id) {
     note.value = s.note || '';
     note.onchange = () => { s.note = note.value.trim(); store(); };
     root.appendChild(note);
-    const build = el('button.btn.gold', { type: 'button' }, icon('sync'), el('span', { text: 'לבנות את האימון הקרוב מזה' }));
-    build.onclick = () => {
-      const plan = upcoming();
-      /* יש כבר אימון קרוב עם תרגילים — לא מחליפים אותו בלחיצה אחת */
-      if (plan && plan.drills.length && !build.classList.contains('sure')) {
-        build.classList.add('sure');
-        build.lastChild.textContent = 'להחליף את "' + titleOf(plan) + '"? לחיצה נוספת';
-        return;
-      }
-      duplicate(s);
-      syncNow();
-      location.hash = '#/v/a';
-    };
+    const build = el('button.btn.gold', { type: 'button', onclick: () => copyInto(s, () => afterLayers(() => { location.hash = '#/v/a'; })) },
+      icon('sync'), el('span', { text: 'שכפול לאימון הבא' }));
     root.appendChild(build);
     const del = el('button.btn.quiet.sm', { type: 'button', text: 'מחיקה מהיומן' });
     del.onclick = () => {
