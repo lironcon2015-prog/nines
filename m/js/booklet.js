@@ -3,6 +3,7 @@
 import { buildPitch, createPitch, mirrorScenario, mirrorRole, mirrorText } from './pitch.js';
 import { isLearned, toggleLearned, learnedCount, resetBooklet, setLast, isMirrored, setMirrored } from './store.js';
 import { createGlossary } from './terms.js';
+import { mountBoard } from './board.js';
 
 const $ = id => document.getElementById(id);
 
@@ -52,7 +53,6 @@ export function mountBooklet(booklet, formation, startId, onScenario, terms) {
     /* מספר דו-ספרתי לא נכנס בגודל של ספרה אחת */
     $('mark-b').parentElement.classList.toggle('wide', n.length > 1);
     $('b-title').textContent = heroTitle();
-    $('lg-role').textContent = 'ה-' + n;
     $('b-lede').textContent = flip(booklet.lede);
     if (formationText) formationText.nodeValue = ' ' + flip(booklet.formationNote.text);
   }
@@ -65,24 +65,8 @@ export function mountBooklet(booklet, formation, startId, onScenario, terms) {
   board.prepend(svg);
   const pitch = createPitch(svg, formation, booklet.role);
 
-  /* --- הרצת התנועה --- */
-  const playBtn = $('play');
-  let playing = false;
-
-  function stopPlaying() {
-    pitch.stopPlay();
-    playing = false;
-    playBtn.disabled = false;
-    playBtn.textContent = 'הראה לי את התנועה';
-  }
-
-  on(playBtn, 'click', () => {
-    if (playing) return;
-    playing = true;
-    playBtn.disabled = true;
-    playBtn.textContent = 'רץ…';
-    pitch.play(shown(), stopPlaying);
-  });
+  /* --- הרצת התנועה: הפס שמתחת למגרש --- */
+  const player = mountBoard(board, pitch, { hero, obstruct: () => $('b-dock') });
 
   /* --- מילון המונחים --- */
   const glossary = createGlossary(terms);
@@ -183,23 +167,18 @@ export function mountBooklet(booklet, formation, startId, onScenario, terms) {
   /* --- ציור תרחיש --- */
   let idx = 0;
 
-  /** התרחיש הנוכחי כפי שהוא מוצג — משוקף אם צריך */
-  const shown = () => (isMirrored() ? mirrorScenario(S[idx], formation) : S[idx]);
-
   function render(i) {
     idx = i;
     /* גם הטקסט מגיע מהעותק המשוקף, אחרת ההסבר מדבר על צד אחד
        בזמן שהמגרש מראה את השני */
     const s = isMirrored() ? mirrorScenario(S[i], formation) : S[i];
-    stopPlaying();
     closeTerm();
     pitch.setRole(hero());
     pitch.render(s);
+    player.show(s);
 
     /* קורא מסך מקבל את התרחיש עצמו ולא "דיאגרמת מגרש" סתמית */
     svg.setAttribute('aria-label', s.title + '. ' + s.sub);
-    /* מפת תפקיד אין בה תנועה להריץ */
-    playBtn.parentElement.hidden = !pitch.canPlay(s);
 
     $('p-phase').textContent = s.phase;
 
@@ -265,7 +244,8 @@ export function mountBooklet(booklet, formation, startId, onScenario, terms) {
   /* החלקה: בממשק ימין-לשמאל, החלקה ימינה מקדמת לתרחיש הבא */
   let sx = 0, sy = 0, tracking = false;
   on(board, 'touchstart', e => {
-    if (e.touches.length !== 1) return;
+    /* גרירה בציר הזמן אינה החלקה בין תרחישים */
+    if (e.touches.length !== 1 || e.target.closest('.pbar')) return;
     sx = e.touches[0].clientX; sy = e.touches[0].clientY; tracking = true;
   }, { passive: true });
   on(board, 'touchend', e => {
@@ -282,7 +262,7 @@ export function mountBooklet(booklet, formation, startId, onScenario, terms) {
     go,
     destroy() {
       clearTimeout(advance);
-      stopPlaying();
+      player.destroy();
       closeTerm();
       listeners.forEach(([t, type, fn, opts]) => t.removeEventListener(type, fn, opts));
       svg.remove();

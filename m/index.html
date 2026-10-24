@@ -134,17 +134,8 @@ try { if (localStorage.getItem('k8:theme') === 'dark') document.documentElement.
       <span class="seg"><button type="button" data-foot="R" aria-pressed="true">ימין</button><button type="button" data-foot="L" aria-pressed="false">שמאל</button></span>
     </div>
 
-    <div class="board" id="board">
-      <div class="playrow"><button class="play glass" id="play" type="button">הראה לי את התנועה</button></div>
-      <div class="legend">
-        <span><i class="sw sw-me"></i><span id="lg-role"></span></span>
-        <span><i class="sw sw-our"></i>הקבוצה שלנו</span>
-        <span><i class="sw sw-opp"></i>יריב</span>
-        <span><i class="sw sw-run"></i>ריצה</span>
-        <span><i class="sw sw-pass"></i>מסירה</span>
-        <span><i class="sw sw-ghost"></i>נקודת התחלה</span>
-      </div>
-    </div>
+    <!-- המגרש, ומתחתיו פס ההרצה והמקרא — נבנים ב-board.js -->
+    <div class="board" id="board"></div>
     <div class="hint" id="hint">החלק ימינה ושמאלה כדי לעבור בין התרחישים</div>
 
     <div class="panel card" id="panel">
