@@ -163,7 +163,7 @@ export async function refreshMedia(url, full) {
    מתיר ניגון מכל מקור. אותו מסלול כמו באינסטגרם: jina, X-Return-Format: html. */
 async function fbMedia(href) {
   if (!embedUrl(href)) return { media: null, blocked: false, log: ['פייסבוק: אין כתובת מלאה'] };
-  return firstFile([viaScriptFile(href), fbJina(href)]);
+  return firstFile([viaServerFile(href), viaScriptFile(href), fbJina(href)]);
 }
 
 async function fbJina(href) {
@@ -206,7 +206,7 @@ export function fbSrc(html) {
    jina מחזיר את הדף כמו שהוא (X-Return-Format: html) ומתיר את הכותרת הזו
    מהמקור שלנו, בשנייה. allorigins ו-codetabs נפלו באותה בדיקה (522). */
 async function igMedia(url) {
-  return firstFile([viaScriptFile(url), igJina(url)]);
+  return firstFile([viaServerFile(url), viaScriptFile(url), igJina(url)]);
 }
 
 async function igJina(url) {
@@ -244,9 +244,9 @@ function firstChildVideo(media) {
   return hit ? hit.node.video_url : null;
 }
 
-/* --- שני מסלולים לקובץ, ביחד ---
-   הסקריפט שלך — שרת שלך: אין לו מגבלת בקשות של אחרים, ואף אחד לא חוסם אותו
-   בגלל אחרים. jina — בלי הקמה, אבל שירות חינמי לכולם: באוקטובר 2026 הוא חסם
+/* --- שלושה מסלולים לקובץ, ביחד ---
+   שרת הסרטונים בקלאודפלייר (server/ בריפו Recipes) — שרת שלך, ועונה בחלקיק
+   שנייה. הסקריפט שלך בדרייב — גם שרת שלך, אבל מתעורר לאט. jina — בלי הקמה, אבל שירות חינמי לכולם: באוקטובר 2026 הוא חסם
    את אינסטגרם לכל מי שאינו רשום ("due to previous abuse"), והנגן נפל לנגן של
    אינסטגרם. הראשון שמביא קובץ זוכה, בלי לחכות לאיטי — הסקריפט מתעורר לאט.
    אף אחד לא הביא — "חסום" אם מישהו ראה חסימה של זכויות. */
@@ -272,6 +272,18 @@ export function whyNoFile(log, name) {
   }
   if (!cloud.isOn()) return 'השירות החינמי שמביא את הקובץ חסום כרגע, ולכן הנגן של ' + name + '. חיבור לדרייב (⚙) פותר את זה לתמיד';
   return null;
+}
+
+/* על הדומיין שלך ולא על workers.dev: הסלולרי חוסם את workers.dev (כך ב-MGivatayim) */
+const MEDIA_SERVER = 'https://media.lironcon.com';
+
+function viaServerFile(url) {
+  return withTimeout(MEDIA_SERVER + '/media?url=' + encodeURIComponent(url), TIMEOUT)
+    .then(res => res.json())
+    .then(got => got && got.ok
+      ? { media: got.media || null, blocked: !!got.blocked, log: ['השרת: ' + (got.media ? 'קובץ' : got.blocked ? 'חסום מחוץ לאינסטגרם' : 'בלי קובץ')] }
+      : { media: null, blocked: false, log: ['השרת: ' + ((got && got.error) || 'תשובה לא צפויה')] })
+    .catch(e => ({ media: null, blocked: false, log: ['השרת: ' + reason(e)] }));
 }
 
 /** null כשאין סקריפט. סקריפט שעוד לא עודכן עונה "פעולה לא מוכרת: media" — וזה
