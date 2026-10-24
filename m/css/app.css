@@ -426,49 +426,51 @@ body.on-booklet { overflow: hidden; }
 .pspeed[aria-pressed="true"] { color: var(--gold-text); background: var(--gold-soft); border-color: var(--gold-line); }
 
 /* ההנחיות: כרטיס אחד בכל פעם, או הכול ברשימה כשמושכים את הידית */
+/* הכול תחת .guide: .list ו-.card הם שמות כלליים שתפוסים במסכים אחרים, ו-.list
+   עם display:none העלים את רשימת הסרטונים בתצוגת שורות */
 .guide { flex: none; min-height: 0; display: flex; flex-direction: column; background: var(--surface-solid); border-top: 1px solid var(--line);
   box-shadow: 0 -12px 22px -16px rgba(6, 12, 22, .35); padding-bottom: env(safe-area-inset-bottom); }
 .bk.open .guide { flex: 0 0 52%; }
-.handle { flex: none; width: 100%; border: 0; background: none; display: flex; flex-direction: column; align-items: center; gap: .15rem; padding: .35rem 0 .3rem;
+.guide .handle { flex: none; width: 100%; border: 0; background: none; display: flex; flex-direction: column; align-items: center; gap: .15rem; padding: .35rem 0 .3rem;
   font-size: .72rem; font-weight: 700; color: var(--faint); touch-action: none; }
-.handle i { width: 38px; height: 4px; border-radius: 4px; background: var(--line-strong); }
-.handle svg.i { width: 12px; height: 12px; vertical-align: -1px; }
-.cards-wrap { padding-bottom: .7rem; }
-.cards { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain;
+.guide .handle i { width: 38px; height: 4px; border-radius: 4px; background: var(--line-strong); }
+.guide .handle svg.i { width: 12px; height: 12px; vertical-align: -1px; }
+.guide .cards-wrap { padding-bottom: .7rem; }
+.guide .cards { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain;
   padding: 0 max(.75rem, env(safe-area-inset-right, 0px)) 0 max(.75rem, env(safe-area-inset-left, 0px)); scroll-padding-inline: .75rem; }
-.cards::-webkit-scrollbar { display: none; }
+.guide .cards::-webkit-scrollbar { display: none; }
 /* 86% ולא מלא: קצה הכרטיס הבא מציץ, וזה מה שאומר "אפשר להחליק" */
-.card { flex: 0 0 86%; scroll-snap-align: start; min-height: 104px; border-radius: 18px; padding: .6rem .8rem .7rem; display: grid; align-content: start; gap: .2rem;
+.guide .card { flex: 0 0 86%; scroll-snap-align: start; min-height: 104px; border-radius: 18px; padding: .6rem .8rem .7rem; display: grid; align-content: start; gap: .2rem;
   background: var(--surface-2); border: 1px solid var(--line); }
-.card small { font-size: .66rem; font-weight: 700; letter-spacing: .1em; color: var(--blue); }
-.card p { margin: 0; font-size: .95rem; line-height: 1.45; }
-.card.k-cue { background: var(--gold-soft); border-color: var(--gold-line); }
-.card.k-cue small { color: var(--gold-text); }
-.card.k-cue p { font-weight: 700; font-size: 1.04rem; }
-.card.k-mis { background: var(--well); }
-.card.k-mis small { color: var(--muted); }
-.card .termdef { margin-top: .35rem; }
-.learn { justify-self: start; margin-top: .5rem; height: 36px; padding: 0 1rem; border-radius: 999px; font-size: .84rem; font-weight: 700;
+.guide .card small { font-size: .66rem; font-weight: 700; letter-spacing: .1em; color: var(--blue); }
+.guide .card p { margin: 0; font-size: .95rem; line-height: 1.45; }
+.guide .card.k-cue { background: var(--gold-soft); border-color: var(--gold-line); }
+.guide .card.k-cue small { color: var(--gold-text); }
+.guide .card.k-cue p { font-weight: 700; font-size: 1.04rem; }
+.guide .card.k-mis { background: var(--well); }
+.guide .card.k-mis small { color: var(--muted); }
+.guide .card .termdef { margin-top: .35rem; }
+.guide .learn { justify-self: start; margin-top: .5rem; height: 36px; padding: 0 1rem; border-radius: 999px; font-size: .84rem; font-weight: 700;
   background: var(--gold-soft); border: 1px solid var(--gold-line); color: var(--gold-text); }
-.learn[aria-pressed="true"] { background: linear-gradient(180deg, var(--gold-hi), var(--gold-lo)); color: var(--on-gold); border-color: transparent; }
-.dots { display: flex; justify-content: center; gap: 5px; margin-top: .55rem; }
-.dots button { width: 6px; height: 6px; padding: 0; border: 0; border-radius: 3px; background: var(--line-strong); transition: width .2s, background .2s; }
-.dots button[aria-current="true"] { width: 16px; background: var(--gold); }
-.list { display: none; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+.guide .learn[aria-pressed="true"] { background: linear-gradient(180deg, var(--gold-hi), var(--gold-lo)); color: var(--on-gold); border-color: transparent; }
+.guide .dots { display: flex; justify-content: center; gap: 5px; margin-top: .55rem; }
+.guide .dots button { width: 6px; height: 6px; padding: 0; border: 0; border-radius: 3px; background: var(--line-strong); transition: width .2s, background .2s; }
+.guide .dots button[aria-current="true"] { width: 16px; background: var(--gold); }
+.guide .list { display: none; background: none; border: 0; border-radius: 0; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
   padding: .1rem max(1rem, env(safe-area-inset-right, 0px)) 1rem max(1rem, env(safe-area-inset-left, 0px)); }
-.bk.open .cards-wrap { display: none; }
-.bk.open .list { display: block; }
-.g-title { font-size: 1.2rem; }
-.list .sub { margin: .15rem 0 .7rem; }
-.cue { padding: .6rem .8rem; border-radius: 16px; background: var(--gold-soft); border: 1px solid var(--gold-line); font-weight: 700; font-size: 1rem; }
-.cue small, .mis small { display: block; font-size: .66rem; letter-spacing: .1em; color: var(--gold-text); font-weight: 700; margin-bottom: .1rem; }
-.does { list-style: none; margin: .8rem 0 0; padding: 0; display: grid; gap: .55rem; }
-.does li { position: relative; padding-inline-start: 1rem; font-size: .95rem; color: var(--text); }
-.does li::before { content: ""; position: absolute; inset-inline-start: 0; top: .62em; width: 6px; height: 6px; border-radius: 50%; background: var(--blue); }
-.mis { margin-top: .8rem; padding: .6rem .8rem; border-radius: 14px; background: var(--well); border: 1px solid var(--line); font-size: .92rem; }
-.mis small { color: var(--muted); }
-.list .learn { display: block; margin-top: .9rem; }
-.list .legend { margin-top: 1rem; padding-top: .8rem; border-top: 1px solid var(--line); }
+.bk.open .guide .cards-wrap { display: none; }
+.bk.open .guide .list { display: block; }
+.guide .g-title { font-size: 1.2rem; }
+.guide .list .sub { margin: .15rem 0 .7rem; }
+.guide .cue { padding: .6rem .8rem; border-radius: 16px; background: var(--gold-soft); border: 1px solid var(--gold-line); font-weight: 700; font-size: 1rem; }
+.guide .cue small, .guide .mis small { display: block; font-size: .66rem; letter-spacing: .1em; color: var(--gold-text); font-weight: 700; margin-bottom: .1rem; }
+.guide .does { list-style: none; margin: .8rem 0 0; padding: 0; display: grid; gap: .55rem; }
+.guide .does li { position: relative; padding-inline-start: 1rem; font-size: .95rem; color: var(--text); }
+.guide .does li::before { content: ""; position: absolute; inset-inline-start: 0; top: .62em; width: 6px; height: 6px; border-radius: 50%; background: var(--blue); }
+.guide .mis { margin-top: .8rem; padding: .6rem .8rem; border-radius: 14px; background: var(--well); border: 1px solid var(--line); font-size: .92rem; }
+.guide .mis small { color: var(--muted); }
+.guide .list .learn { display: block; margin-top: .9rem; }
+.guide .list .legend { margin-top: 1rem; padding-top: .8rem; border-top: 1px solid var(--line); }
 
 /* לרוחב — טלפון מסובב, טאבלט, מחשב: המגרש בגובה המסך מצד אחד, וההנחיות
    כרשימה מהצד השני. אותו תנאי כמו ב-booklet.js */
