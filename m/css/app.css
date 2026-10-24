@@ -305,8 +305,6 @@ h1, h2, h3 { margin: 0; font-weight: 700; letter-spacing: -.01em; line-height: 1
 .verror, .err { margin: .6rem 0 0; padding: .6rem .8rem; border-radius: 12px; background: var(--gold-soft); border: 1px solid var(--gold-line); color: var(--text); font-size: .86rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* ── חוברת ───────────────────────────────────────────────────────────── */
-.bhead { margin-top: .1rem; }
-.bhead .crest > span:first-child { font-size: 1.15rem; }
 .track { display: flex; gap: 3px; margin-top: 1rem; }
 .track i { flex: 1; height: 4px; border-radius: 3px; background: var(--surface-2); border: 1px solid var(--line); }
 .track i.on { background: var(--gold); border-color: transparent; }
@@ -341,9 +339,6 @@ h1, h2, h3 { margin: 0; font-weight: 700; letter-spacing: -.01em; line-height: 1
 .chip[data-phase="הגנה"] .dot { background: transparent; border: 1.6px solid var(--blue); }
 .chip[data-phase="מעברים"] .dot { background: linear-gradient(90deg, var(--blue) 50%, transparent 50%); border: 1.2px solid var(--blue); }
 
-.side { display: flex; align-items: center; gap: .5rem; margin-top: .6rem; font-size: .78rem; color: var(--faint); }
-.side em { font-style: normal; }
-.side #side-label { margin-inline-start: auto; }
 .seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--well); border: 1px solid var(--line); }
 .seg button { padding: 3px 12px; border-radius: 999px; font-size: .8rem; font-weight: 700; color: var(--faint); border: 1px solid transparent; background: none; }
 .seg button[aria-pressed="true"] { color: var(--gold-text); background: var(--gold-soft); border-color: var(--gold-line); }
@@ -351,61 +346,170 @@ h1, h2, h3 { margin: 0; font-weight: 700; letter-spacing: -.01em; line-height: 1
 .board { position: relative; margin-top: .7rem; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
 svg.pitch { display: block; width: 100%; height: auto; border-radius: 20px; border: 1px solid var(--line-strong); background: var(--pitch-edge); }
 
-/* ── לוח ההרצה: המגרש ופס השליטה הם כרטיס אחד ─────────────────────── */
-/* הרקע של הכרטיס הוא צבע השוליים של המגרש: כשהמגרש מתכווץ לגובה המסך
-   (מחשב, טלפון נמוך) מה שמסביבו נראה כהמשך של המגרש ולא כחור */
-.board.has-bar { border-radius: 22px; border: 1px solid var(--line-strong); background: var(--pitch-edge); overflow: hidden; box-shadow: 0 10px 28px rgba(15, 26, 43, .08); }
-/* בטלפון נמוך המגרש מתכווץ כדי שהמגרש והפס ייכנסו יחד מעל הפס הצף —
-   אחרת ההרצה רצה כשחצי ממנה מוסתר */
-.board.has-bar svg.pitch { border: 0; border-radius: 0; width: auto; max-width: 100%; margin: 0 auto;
-  max-height: calc(100svh - var(--tab-space) - 54px - 148px); cursor: pointer; }
-.board.has-bar.still svg.pitch { cursor: default; }
-.board.has-bar.still { overflow: visible; border: 0; background: none; box-shadow: none; }
-.board.has-bar.still svg.pitch { border: 1px solid var(--line-strong); border-radius: 20px; max-height: none; width: 100%; }
+/* ── מסך החוברת: מסך אחד, המגרש וההנחיות יחד ───────────────────────────
+   ממלא את המסך: כותרת, מגרש, שורת שליטה, הנחיות. הדף עצמו לא נגלל — מה
+   שצריך לגלול (הרשימה, הכרטיסים) נגלל בתוך המקום שלו. */
+body.on-booklet { overflow: hidden; }
+.bk { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; background: var(--bg); color: var(--text); }
+.bk-head { flex: none; display: flex; align-items: center; gap: .25rem;
+  padding: calc(env(safe-area-inset-top) + .3rem) max(.5rem, env(safe-area-inset-right, 0px)) .3rem max(.5rem, env(safe-area-inset-left, 0px)); }
+.bk .ic { width: 38px; height: 38px; flex: none; border-radius: 50%; border: 0; padding: 0; display: grid; place-items: center; background: var(--surface-2); color: var(--text); text-decoration: none; }
+.bk .ic svg { width: 17px; height: 17px; }
+/* השם הוא הכפתור לרשימת התרחישים */
+.ttl { flex: 1; min-width: 0; border: 0; background: none; padding: .15rem .3rem; border-radius: 14px; display: grid; justify-items: center; line-height: 1.2; color: var(--text); }
+.ttl b { max-width: 100%; display: inline-flex; align-items: center; gap: .3rem; font-size: 1rem; font-weight: 700; }
+.ttl b span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ttl .caret { width: 12px; height: 12px; color: var(--faint); }
+.ttl .ok { font-style: normal; font-size: .85rem; color: var(--gold-text); }
+.ttl small { font-size: .66rem; font-weight: 700; letter-spacing: .1em; color: var(--blue); }
+.ttl:disabled { cursor: default; opacity: 1; }
+.ttl:disabled .caret { display: none; }
+.bk-nav { display: flex; align-items: center; flex: none; }
+.bk-nav .ic { background: none; width: 34px; }
+.bk-nav .num { min-width: 2.6rem; text-align: center; font-family: Rubik, sans-serif; font-size: .78rem; font-weight: 600; color: var(--muted); }
 
-.pbar { padding: .55rem .7rem .7rem; border-top: 1px solid var(--line); display: grid; gap: .45rem; background: var(--surface-solid); }
-.pcap { display: flex; align-items: center; gap: .5rem; min-height: 1.6rem; font-size: .92rem; font-weight: 700; color: var(--text); line-height: 1.3; }
-.pbar.idle .pcap { color: var(--faint); font-weight: 600; font-size: .86rem; }
-.pstep { flex: none; min-width: 1.9rem; height: 1.45rem; padding: 0 .4rem; border-radius: 999px; display: inline-grid; place-items: center;
-  font-family: Rubik, sans-serif; font-size: .74rem; font-weight: 600; color: var(--on-gold); background: linear-gradient(180deg, var(--gold-hi), var(--gold-lo)); }
-.pbar[data-state="ended"] .pstep { background: var(--gold-soft); color: var(--gold-text); box-shadow: inset 0 0 0 1px var(--gold-line); }
-
-.pctl { display: flex; align-items: center; gap: .6rem; }
-.pplay { flex: none; width: 46px; height: 46px; border-radius: 50%; border: 0; display: grid; place-items: center; color: var(--on-gold);
-  background: linear-gradient(180deg, var(--gold-hi), var(--gold-lo)); box-shadow: 0 4px 14px var(--gold-glow), inset 0 1px 0 rgba(255, 255, 255, .5); }
-.pplay svg { width: 22px; height: 22px; }
-/* במשפחת RTL ▶ מצביע ימינה כמו בכל נגן — סימן ההפעלה אינו מתהפך */
-.pbar[data-state="idle"] .pplay svg, .pbar[data-state="paused"] .pplay svg { margin-left: 3px; }
-/* עד הפעם הראשונה: הכפתור נושם, כדי שילד שלא יודע שאפשר להריץ יגלה */
-.board:not(.seen) .pbar[data-state="idle"] .pplay { animation: breathe 2.2s ease-in-out infinite; }
-@keyframes breathe { 0%, 100% { box-shadow: 0 4px 14px var(--gold-glow), 0 0 0 0 var(--gold-glow); } 50% { box-shadow: 0 4px 14px var(--gold-glow), 0 0 0 9px rgba(227, 176, 39, 0); } }
-
-.ptrack { position: relative; flex: 1; height: 30px; display: flex; align-items: center; }
-/* הזמן זורם מימין לשמאל, כמו כל השאר בממשק. לא dir="rtl" על הפקד —
-   לא כל דפדפן הופך אותו — אלא פקד רגיל שמשוקף, וזה עובד בכולם */
-.pseek { -webkit-appearance: none; appearance: none; width: 100%; height: 30px; margin: 0; background: none; cursor: pointer; position: relative; z-index: 1; touch-action: none; transform: scaleX(-1); }
-.pseek::-webkit-slider-runnable-track { height: 6px; border-radius: 6px; background: linear-gradient(to right, var(--gold) var(--p, 0%), var(--surface-2) var(--p, 0%)); box-shadow: inset 0 0 0 1px var(--line); }
-.pseek::-moz-range-track { height: 6px; border-radius: 6px; background: linear-gradient(to right, var(--gold) var(--p, 0%), var(--surface-2) var(--p, 0%)); }
-.pseek::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -6px; border-radius: 50%; background: var(--surface-solid); border: 2px solid var(--gold); box-shadow: 0 2px 6px rgba(15, 26, 43, .25); }
-.pseek::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--surface-solid); border: 2px solid var(--gold); }
-.pbar.idle .pseek::-webkit-slider-thumb { border-color: var(--line-strong); }
-/* תחילת כל שלב על הציר */
-.pticks { position: absolute; inset-inline: 9px; top: 50%; height: 0; pointer-events: none; z-index: 2; }
-.pticks i { position: absolute; top: -4px; width: 2px; height: 8px; margin-inline-start: -1px; border-radius: 2px; background: var(--surface-solid); box-shadow: 0 0 0 1px var(--line-strong); }
-.pspeed { flex: none; height: 32px; padding: 0 .75rem; border-radius: 999px; font-size: .8rem; font-weight: 700; color: var(--faint); background: var(--surface-2); border: 1px solid var(--line); }
-.pspeed[aria-pressed="true"] { color: var(--gold-text); background: var(--gold-soft); border-color: var(--gold-line); }
-
-.pvar { display: flex; align-items: center; gap: .5rem; font-size: .82rem; font-weight: 700; color: var(--muted); }
-.pvar .seg button { min-width: 2.6rem; font-family: Rubik, sans-serif; font-size: .82rem; }
-
-/* אישור לנגיעה במגרש */
-.pflash { position: absolute; left: 50%; top: 42%; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; display: grid; place-items: center;
+/* הבמה: המגרש ממלא אותה. viewBox נקבע במצלמה (board.js). לא .stage —
+   השם תפוס בנגן הסרטונים, והכללים שלו מיקמו את המגרש מעל כל המסך */
+.bk-stage { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; background: var(--pitch-edge); touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.bk-stage svg.pitch { width: 100%; height: 100%; border: 0; border-radius: 0; cursor: pointer; }
+.bk-stage.still svg.pitch { cursor: default; }
+.camb, .pvar { position: absolute; top: 10px; z-index: 2; border: 1px solid var(--glass-rim); background: var(--glass-bg); color: var(--glass-text);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); box-shadow: var(--glass-shine), 0 4px 10px rgba(6, 12, 22, .18); }
+.camb { inset-inline-start: 10px; height: 32px; padding: 0 .65rem 0 .45rem; border-radius: 999px; display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 700; }
+.camb svg { width: 14px; height: 21px; flex: none; }
+.mini-f { fill: var(--pitch-a); stroke: var(--pitch-line); stroke-width: 18; }
+.mini-l { stroke: var(--pitch-line); stroke-width: 14; }
+.mini-w { fill: var(--gold-soft); stroke: var(--run); stroke-width: 30; }
+/* בחירת אפשרות על המגרש — האותיות כאן הן האותיות שעל החיצים */
+.pvar { inset-inline-end: 10px; display: inline-flex; align-items: center; gap: .35rem; padding: 3px 3px 3px .6rem; border-radius: 999px; font-size: .72rem; font-weight: 700; }
+.pvar .seg { padding: 0; background: none; border: 0; }
+.pvar .seg button { min-width: 2.2rem; padding: 3px 10px; font-family: Rubik, sans-serif; }
+/* אישור לנגיעה במגרש — כמו בנגן וידאו */
+.pflash { position: absolute; left: 50%; top: 45%; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; display: grid; place-items: center;
   background: rgba(8, 12, 20, .5); color: #fff; opacity: 0; pointer-events: none; transform: scale(.8); }
 .pflash svg { width: 28px; height: 28px; }
 .pflash.on { animation: pflash .55s ease-out; }
 @keyframes pflash { 0% { opacity: 0; transform: scale(.8); } 25% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.15); } }
 
-.legend { display: flex; flex-wrap: wrap; gap: .35rem .85rem; margin-top: .6rem; font-size: .74rem; color: var(--faint); font-weight: 600; }
+/* שורת השליטה: ▶ גדול ליד האגודל, ולידו מה קורה עכשיו וציר הזמן */
+.ctl { flex: none; display: flex; align-items: center; gap: .6rem; background: var(--surface-solid); border-top: 1px solid var(--line);
+  padding: .5rem max(.75rem, env(safe-area-inset-right, 0px)) .55rem max(.75rem, env(safe-area-inset-left, 0px)); }
+.pplay { flex: none; width: 54px; height: 54px; border-radius: 50%; border: 0; padding: 0; display: grid; place-items: center; color: var(--on-gold);
+  background: linear-gradient(180deg, var(--gold-hi), var(--gold-lo)); box-shadow: 0 5px 16px var(--gold-glow), inset 0 1px 0 rgba(255, 255, 255, .5); }
+.pplay svg { width: 24px; height: 24px; }
+/* ▶ מצביע ימינה כמו בכל נגן — סימן ההפעלה אינו מתהפך ב-RTL */
+.pplay[data-state="play"] svg { margin-left: 3px; }
+.pplay:disabled { opacity: .4; box-shadow: none; }
+/* עד הפעם הראשונה ▶ נושם, כדי שילד שלא יודע שאפשר להריץ יגלה */
+.pplay.breathe { animation: breathe 2.2s ease-in-out infinite; }
+@keyframes breathe { 0%, 100% { box-shadow: 0 5px 16px var(--gold-glow), 0 0 0 0 var(--gold-glow); } 50% { box-shadow: 0 5px 16px var(--gold-glow), 0 0 0 9px rgba(227, 176, 39, 0); } }
+.ptime { flex: 1; min-width: 0; display: grid; gap: .05rem; }
+.pcap { display: flex; align-items: center; gap: .4rem; min-height: 1.45rem; font-size: .88rem; font-weight: 700; line-height: 1.25; color: var(--text); }
+.ctl.idle .pcap { color: var(--faint); font-weight: 600; font-size: .82rem; }
+.pstep { flex: none; min-width: 1.9rem; height: 1.3rem; padding: 0 .4rem; border-radius: 999px; display: inline-grid; place-items: center;
+  font-family: Rubik, sans-serif; font-size: .7rem; font-weight: 600; color: var(--on-gold); background: linear-gradient(180deg, var(--gold-hi), var(--gold-lo)); }
+.ctl[data-state="ended"] .pstep { background: var(--gold-soft); color: var(--gold-text); box-shadow: inset 0 0 0 1px var(--gold-line); }
+.ptrack { position: relative; height: 22px; display: flex; align-items: center; }
+/* הזמן זורם מימין לשמאל, כמו כל השאר בממשק. לא dir="rtl" על הפקד —
+   לא כל דפדפן הופך אותו — אלא פקד רגיל שמשוקף, וזה עובד בכולם */
+.pseek { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; margin: 0; background: none; cursor: pointer; position: relative; z-index: 1; touch-action: none; transform: scaleX(-1); }
+.pseek::-webkit-slider-runnable-track { height: 5px; border-radius: 5px; background: linear-gradient(to right, var(--gold) var(--p, 0%), var(--surface-2) var(--p, 0%)); box-shadow: inset 0 0 0 1px var(--line); }
+.pseek::-moz-range-track { height: 5px; border-radius: 5px; background: linear-gradient(to right, var(--gold) var(--p, 0%), var(--surface-2) var(--p, 0%)); }
+.pseek::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -5.5px; border-radius: 50%; background: var(--surface-solid); border: 2px solid var(--gold); box-shadow: 0 2px 6px rgba(15, 26, 43, .25); }
+.pseek::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--surface-solid); border: 2px solid var(--gold); }
+.ctl.idle .pseek::-webkit-slider-thumb { border-color: var(--line-strong); }
+.pseek:disabled { opacity: .4; cursor: default; }
+/* תחילת כל שלב על הציר */
+.pticks { position: absolute; inset-inline: 8px; top: 50%; height: 0; pointer-events: none; z-index: 2; }
+.pticks i { position: absolute; top: -4px; width: 2px; height: 8px; margin-inline-start: -1px; border-radius: 2px; background: var(--surface-solid); box-shadow: 0 0 0 1px var(--line-strong); }
+.pspeed { flex: none; height: 32px; padding: 0 .75rem; border-radius: 999px; font-size: .8rem; font-weight: 700; color: var(--faint); background: var(--surface-2); border: 1px solid var(--line); }
+.pspeed[aria-pressed="true"] { color: var(--gold-text); background: var(--gold-soft); border-color: var(--gold-line); }
+
+/* ההנחיות: כרטיס אחד בכל פעם, או הכול ברשימה כשמושכים את הידית */
+.guide { flex: none; min-height: 0; display: flex; flex-direction: column; background: var(--surface-solid); border-top: 1px solid var(--line);
+  box-shadow: 0 -12px 22px -16px rgba(6, 12, 22, .35); padding-bottom: env(safe-area-inset-bottom); }
+.bk.open .guide { flex: 0 0 52%; }
+.handle { flex: none; width: 100%; border: 0; background: none; display: flex; flex-direction: column; align-items: center; gap: .15rem; padding: .35rem 0 .3rem;
+  font-size: .72rem; font-weight: 700; color: var(--faint); touch-action: none; }
+.handle i { width: 38px; height: 4px; border-radius: 4px; background: var(--line-strong); }
+.handle svg.i { width: 12px; height: 12px; vertical-align: -1px; }
+.cards-wrap { padding-bottom: .7rem; }
+.cards { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain;
+  padding: 0 max(.75rem, env(safe-area-inset-right, 0px)) 0 max(.75rem, env(safe-area-inset-left, 0px)); scroll-padding-inline: .75rem; }
+.cards::-webkit-scrollbar { display: none; }
+/* 86% ולא מלא: קצה הכרטיס הבא מציץ, וזה מה שאומר "אפשר להחליק" */
+.card { flex: 0 0 86%; scroll-snap-align: start; min-height: 104px; border-radius: 18px; padding: .6rem .8rem .7rem; display: grid; align-content: start; gap: .2rem;
+  background: var(--surface-2); border: 1px solid var(--line); }
+.card small { font-size: .66rem; font-weight: 700; letter-spacing: .1em; color: var(--blue); }
+.card p { margin: 0; font-size: .95rem; line-height: 1.45; }
+.card.k-cue { background: var(--gold-soft); border-color: var(--gold-line); }
+.card.k-cue small { color: var(--gold-text); }
+.card.k-cue p { font-weight: 700; font-size: 1.04rem; }
+.card.k-mis { background: var(--well); }
+.card.k-mis small { color: var(--muted); }
+.card .termdef { margin-top: .35rem; }
+.learn { justify-self: start; margin-top: .5rem; height: 36px; padding: 0 1rem; border-radius: 999px; font-size: .84rem; font-weight: 700;
+  background: var(--gold-soft); border: 1px solid var(--gold-line); color: var(--gold-text); }
+.learn[aria-pressed="true"] { background: linear-gradient(180deg, var(--gold-hi), var(--gold-lo)); color: var(--on-gold); border-color: transparent; }
+.dots { display: flex; justify-content: center; gap: 5px; margin-top: .55rem; }
+.dots button { width: 6px; height: 6px; padding: 0; border: 0; border-radius: 3px; background: var(--line-strong); transition: width .2s, background .2s; }
+.dots button[aria-current="true"] { width: 16px; background: var(--gold); }
+.list { display: none; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: .1rem max(1rem, env(safe-area-inset-right, 0px)) 1rem max(1rem, env(safe-area-inset-left, 0px)); }
+.bk.open .cards-wrap { display: none; }
+.bk.open .list { display: block; }
+.g-title { font-size: 1.2rem; }
+.list .sub { margin: .15rem 0 .7rem; }
+.cue { padding: .6rem .8rem; border-radius: 16px; background: var(--gold-soft); border: 1px solid var(--gold-line); font-weight: 700; font-size: 1rem; }
+.cue small, .mis small { display: block; font-size: .66rem; letter-spacing: .1em; color: var(--gold-text); font-weight: 700; margin-bottom: .1rem; }
+.does { list-style: none; margin: .8rem 0 0; padding: 0; display: grid; gap: .55rem; }
+.does li { position: relative; padding-inline-start: 1rem; font-size: .95rem; color: var(--text); }
+.does li::before { content: ""; position: absolute; inset-inline-start: 0; top: .62em; width: 6px; height: 6px; border-radius: 50%; background: var(--blue); }
+.mis { margin-top: .8rem; padding: .6rem .8rem; border-radius: 14px; background: var(--well); border: 1px solid var(--line); font-size: .92rem; }
+.mis small { color: var(--muted); }
+.list .learn { display: block; margin-top: .9rem; }
+.list .legend { margin-top: 1rem; padding-top: .8rem; border-top: 1px solid var(--line); }
+
+/* לרוחב — טלפון מסובב, טאבלט, מחשב: המגרש בגובה המסך מצד אחד, וההנחיות
+   כרשימה מהצד השני. אותו תנאי כמו ב-booklet.js */
+@media (min-aspect-ratio: 1/1) and (min-width: 560px) {
+  .bk { display: grid; justify-content: center;
+    grid-template-columns: min(calc(100dvh * .645), 56vw) minmax(300px, 540px); grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas: "stage head" "stage guide" "stage ctl"; }
+  .bk .bk-stage { grid-area: stage; }
+  .bk .bk-head { grid-area: head; }
+  .bk .guide, .bk.open .guide { grid-area: guide; border-top: 0; box-shadow: none; padding-bottom: 0; }
+  .bk .ctl { grid-area: ctl; padding-bottom: calc(.55rem + env(safe-area-inset-bottom)); }
+  .bk .bk-head, .bk .guide, .bk .ctl { border-inline-start: 1px solid var(--line); }
+  .bk .handle, .bk .cards-wrap, .bk.open .cards-wrap { display: none; }
+  .bk .list { display: block; }
+}
+
+/* רשימת התרחישים — גיליון שנפתח מהשם */
+.pk-top { display: grid; gap: .45rem; }
+.pk-count { margin: 0; font-size: .84rem; font-weight: 600; color: var(--muted); }
+.pk-track { margin-top: 0; }
+.pk-side { display: flex; align-items: center; gap: .5rem; margin-top: .9rem; font-size: .8rem; color: var(--faint); }
+.pk-side em { font-style: normal; margin-inline-start: auto; }
+.pk-list { list-style: none; margin: .8rem -.4rem 0; padding: 0; display: grid; gap: 2px; }
+.pk-item { width: 100%; display: flex; align-items: center; gap: .6rem; padding: .55rem .5rem; border: 0; border-radius: 14px; background: none; text-align: start;
+  font-size: .95rem; font-weight: 600; color: var(--text); }
+.pk-item[aria-current="true"] { background: var(--gold-soft); color: var(--gold-text); font-weight: 700; }
+.pk-item .n { width: 1.3rem; flex: none; text-align: center; font-family: Rubik, sans-serif; font-size: .74rem; color: var(--faint); }
+.pk-item .t { flex: 1; min-width: 0; }
+.pk-item .dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--faint); }
+.pk-item[data-phase="החזקה"] .dot, .pk-item[data-phase="עם הכדור"] .dot { background: var(--blue); }
+.pk-item[data-phase="הגנה"] .dot { background: transparent; border: 1.6px solid var(--blue); }
+.pk-item[data-phase="מעברים"] .dot { background: linear-gradient(90deg, var(--blue) 50%, transparent 50%); border: 1.2px solid var(--blue); }
+.pk-item .ok { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: .72rem; color: var(--on-gold);
+  background: linear-gradient(180deg, var(--gold-hi), var(--gold-lo)); }
+.pk-item .ok.no { background: none; box-shadow: inset 0 0 0 1.5px var(--line-strong); color: transparent; }
+.sheet .formation { margin-top: 1rem; }
+.sheet .formation p { margin: .45rem 0 0; }
+.sheet .reset { display: block; margin: 1rem auto 0; }
+
+/* המקרא — בסוף רשימת ההנחיות, רק מה שיש בתרחיש הזה */
+.legend { display: flex; flex-wrap: wrap; gap: .35rem .85rem; font-size: .74rem; color: var(--faint); font-weight: 600; }
 .legend > span { display: inline-flex; align-items: center; gap: .32rem; }
 .lsw { width: 14px; height: 14px; flex: none; overflow: visible; }
 .lsw.wide { width: 22px; height: 11px; }
@@ -480,21 +584,9 @@ svg.pitch.mini { border: 0; border-radius: 0; }
 
 /* פאנל ההסבר */
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: var(--pad); }
-.panel { margin-top: 1rem; }
 .phase { font-size: .72rem; font-weight: 700; letter-spacing: .12em; color: var(--blue); margin-bottom: .2rem; }
-.panel h2, #quiz h2 { font-size: 1.3rem; }
+#quiz h2 { font-size: 1.3rem; }
 .sub { margin: .2rem 0 0; color: var(--muted); font-size: .92rem; }
-.cue { margin-top: .8rem; padding: .7rem .9rem; border-radius: 16px; background: var(--gold-soft); border: 1px solid var(--gold-line); font-weight: 700; font-size: 1.02rem; }
-.cue small { display: block; font-size: .68rem; letter-spacing: .1em; color: var(--gold-text); font-weight: 700; margin-bottom: .1rem; }
-.panel ul { list-style: none; margin: .9rem 0 0; padding: 0; display: grid; gap: .6rem; }
-.panel ul li { position: relative; padding-inline-start: 1rem; font-size: .95rem; color: var(--text); }
-.panel ul li::before { content: ""; position: absolute; inset-inline-start: 0; top: .62em; width: 6px; height: 6px; border-radius: 50%; background: var(--blue); }
-.mistake { margin-top: .9rem; border-radius: 14px; background: var(--well); border: 1px solid var(--line); padding: .65rem .85rem; font-size: .92rem; }
-.mistake summary { cursor: pointer; list-style: none; display: flex; font-weight: 700; color: var(--muted); }
-.mistake summary::-webkit-details-marker { display: none; }
-.mistake summary::after { content: "+"; margin-inline-start: auto; }
-.mistake[open] summary::after { content: "−"; }
-.mistake > span { display: block; margin-top: .45rem; color: var(--text); }
 .term { border: 0; background: none; padding: 0; font: inherit; color: inherit; border-bottom: 1.5px dotted var(--blue); cursor: pointer; }
 .term[aria-expanded="true"] { color: var(--blue); }
 .termdef { margin: .45rem 0 .1rem; padding: .55rem .75rem; border-radius: 12px; background: var(--surface-2); border-inline-start: 3px solid var(--blue); font-size: .88rem; color: var(--muted); }
