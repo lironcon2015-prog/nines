@@ -47,16 +47,24 @@ const PROVIDERS = [
   },
   {
     id: 'jina',
+    /* JSON ולא הטקסט: ב-JSON מגיעות תגיות ה-meta של הדף (metadata), ובהן
+       og:image. בטקסט אין אותן, והתמונה הראשונה בו היא סמל של פייסבוק
+       (static.xx.fbcdn.net/rsrc.php) — היא זו שנשמרה, וכשגם microlink
+       מיצה את המכסה היומית, סרטון מפייסבוק נשאר בלי תמונה (אוקטובר 2026) */
     build: u => 'https://r.jina.ai/' + u,
+    init: { headers: { Accept: 'application/json' } },
     read: async res => {
-      const text = await res.text();
+      const json = await res.json();
+      const d = (json && json.data) || {};
+      const meta = d.metadata || {};
+      const text = d.content || '';
       const line = re => { const m = text.match(re); return m ? m[1].trim() : null; };
       return {
-        /* הכותרת של הקורא היא השורה הראשונה, והכתובת הסופית מגיעה אחריה */
-        full: line(/^URL Source:\s*(\S+)/m),
-        title: line(/^Title:\s*(.+)$/m),
-        image: line(/!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/),
-        media: line(/(https?:\/\/[^\s")]+\.mp4[^\s")]*)/)
+        /* og:url היא הכתובת אחרי ההפניה; d.url היא מה שביקשנו — בקישור שיתוף זו ההפניה עצמה */
+        full: meta['og:url'] || d.url || null,
+        title: meta['og:title'] || d.title || null,
+        image: meta['og:image'] || meta['twitter:image'] || contentImage(text),
+        media: meta['og:video:secure_url'] || meta['og:video'] || line(/(https?:\/\/[^\s")]+\.mp4[^\s")]*)/)
       };
     }
   },
@@ -318,7 +326,7 @@ function until(list, enough) {
 
 async function visit(provider, url, out) {
   try {
-    const res = await withTimeout(provider.build(url));
+    const res = await withTimeout(provider.build(url), TIMEOUT, provider.init);
     if (!res.ok) { out.log.push(provider.id + ': ' + res.status); return; }
     take(await provider.read(res), url, out);
     out.log.push(provider.id + ': ' + found(out));
@@ -344,8 +352,21 @@ function take(got, url, out) {
        קובץ וידאו אמיתי — וזה בדיוק מה שפייסבוק ואינסטגרם נותנות. */
     if (file && isVideoFile(file)) out.media = file;
   }
-  if (!out.title && got.title) out.title = clean_title(got.title);
-  if (!out.image && got.image) out.image = normalizeUrl(got.image);
+  if (!out.title && got.title && !junkTitle(got.title)) out.title = clean_title(got.title);
+  if (!out.image && got.image && !siteIcon(got.image)) out.image = normalizeUrl(got.image);
+}
+
+/* כשפייסבוק מגישה לספק דף התחברות במקום הסרטון, הספק עונה בכל זאת: השם הוא
+   שארית של הכתובת ("?mibextid=…") והתמונה סמל של האתר. נבדק מול microlink בקישור
+   שיתוף, אוקטובר 2026 — וכיוון שהראשון לענות זוכה, הזבל חסם את התמונה האמיתית
+   שהגיעה רגע אחריו. */
+function siteIcon(src) {
+  return /\/rsrc\.php\/|\/images\/icons\/|static\.xx\.fbcdn\.net\//.test(src);
+}
+
+function junkTitle(title) {
+  const t = String(title).trim();
+  return !t || /^[?&#]/.test(t) || /^https?:\/\//.test(t) || /^(facebook|instagram|log in|התחברות)/i.test(t);
 }
 
 function found(out) {
@@ -388,7 +409,7 @@ export async function probe() {
   for (const provider of PROVIDERS) {
     const started = Date.now();
     try {
-      const res = await withTimeout(provider.build(target));
+      const res = await withTimeout(provider.build(target), TIMEOUT, provider.init);
       const ms = Date.now() - started;
       lines.push(provider.id + ': ' + (res.ok ? 'עונה' : 'שגיאה ' + res.status) + ' (' + ms + 'ms)');
     } catch (e) {
@@ -476,9 +497,23 @@ function decode(text) {
   return text.replace(/&amp;/g, '&').replace(/&#0?39;/g, "'").replace(/&quot;/g, '"');
 }
 
-/* "וידאו | פייסבוק" ושאר הזנבות שהפלטפורמה מוסיפה לשם — לא שם של סרטון */
+/* תמונה מתוך הטקסט, כשאין og:image — אבל לא סמלים ולוגואים של האתר עצמו,
+   שבפייסבוק באים לפני כל תמונה אחרת */
+function contentImage(text) {
+  const re = /!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/g;
+  let m;
+  while ((m = re.exec(text))) {
+    if (!siteIcon(m[1])) return m[1];
+  }
+  return null;
+}
+
+/* "וידאו | פייסבוק" ושאר הזנבות שהפלטפורמה מוסיפה לשם — לא שם של סרטון.
+   פייסבוק גם מקדימה לו "391K views · 6.3K reactions |" */
 function clean_title(raw) {
   return String(raw)
+    .replace(/\s+/g, ' ')
+    .replace(/^[\d.,]+[KMB]?\s+views?\s*·\s*[\d.,]+[KMB]?\s+reactions?\s*\|\s*/i, '')
     .replace(/\s*[|·–-]\s*(Facebook|Instagram|TikTok|YouTube|Watch)\s*$/i, '')
     .trim()
     .slice(0, 120);
