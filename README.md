@@ -32,6 +32,7 @@ content/center-back.json חוברת הבלם המרכזי (4)
 content/kesher-6.json   חוברת מספר 6
 content/kesher-8.json   חוברת מספר 8
 content/left-back.json  חוברת מגן שמאלי
+content/striker.json    חוברת חלוץ (9)
 content/winger.json     חוברת כנף
 apps-script/Code.gs     הסקריפט שיושב על תיקיית הדרייב — ראה apps-script/README.md
 tools-pack.mjs          בניית pack/all.json — החבילה המלאה
