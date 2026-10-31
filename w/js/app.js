@@ -6,7 +6,7 @@ import { renderLibrary } from './library.js';
 import { mountQuiz, buildQuestions } from './quiz.js';
 import { mountLibrary } from './videolib.js';
 import { mountCategories } from './vcats.js';
-import { mountPlan, mountJournal } from './train.js';
+import { mountPlan, mountJournal, mountTemplates } from './train.js';
 import { mountSync } from './sync.js';
 import { drawPack } from './packui.js';
 import { migrate } from './videos.js';
@@ -41,6 +41,7 @@ function parseHash() {
   if (parts[0] === 'v' && parts[1] === 'c') return { view: 'vcats' };
   /* האימון האישי: האימון הקרוב, והיומן (train.js) */
   if (parts[0] === 'v' && parts[1] === 'a') return { view: 'plan' };
+  if (parts[0] === 'v' && parts[1] === 'p') return parts[2] ? { view: 'plan', tpl: parts[2] } : { view: 'templates' };
   if (parts[0] === 'v' && parts[1] === 'h') return { view: 'journal', id: parts[2] || null };
   if (parts[0] === 'v') return { view: 'videos' };
   if (parts[0] === 's') return { view: 'share' };
@@ -169,7 +170,7 @@ async function boot() {
     });
     return byNum || booklets[0] || null;
   };
-  const TAB_OF = { library: 'home', booklet: 'book', quiz: 'quiz', train: 'quiz', videos: 'vid', vcats: 'vid', plan: 'vid', journal: 'vid', shared: 'book' };
+  const TAB_OF = { library: 'home', booklet: 'book', quiz: 'quiz', train: 'quiz', videos: 'vid', vcats: 'vid', plan: 'vid', templates: 'vid', journal: 'vid', shared: 'book' };
   function paintTabs(route) {
     const b = myBooklet();
     const set = (id, href) => {
@@ -209,9 +210,10 @@ async function boot() {
       return;
     }
 
-    if (route.view === 'plan' || route.view === 'journal') {
+    if (route.view === 'plan' || route.view === 'journal' || route.view === 'templates') {
       screens('plan');
-      current = route.view === 'plan' ? mountPlan($('plan')) : mountJournal($('plan'), route.id);
+      current = route.view === 'plan' ? mountPlan($('plan'), route.tpl)
+        : route.view === 'templates' ? mountTemplates($('plan')) : mountJournal($('plan'), route.id);
       window.scrollTo(0, 0);
       return;
     }

@@ -16,7 +16,7 @@
    הסרטונים (videos.js). */
 
 import {
-  getVideo, platformName, upcoming, journal, getSession, newSession, putSession, removeSession, newId, readOnly, reload
+  getVideo, platformName, upcoming, journal, templates, getSession, newSession, putSession, removeSession, newId, readOnly, reload
 } from './videos.js';
 import { syncNow, onSync } from './sync.js';
 import { el, icon, toast, sheet, openLayer, onEscape, afterLayers } from './ui.js';
@@ -109,10 +109,26 @@ function ensurePlan() {
   return upcoming() || newSession({ date: today() });
 }
 
-/** מהספרייה: הבחירה, או "+ לאימון" בנגן. מחזירה כמה נוספו. */
-export function addVideosToPlan(ids) {
+/* "+ מהסרטונים" מתוך תבנית: הבחירה בספרייה צריכה לחזור אליה ולא לאימון
+   הקרוב. הספרייה היא מסך אחר, ולכן היעד נשמר כאן עד שהבחירה נגמרת. */
+let pickInto = null;
+export function pickTarget(id) { pickInto = id || null; }
+function target() {
+  const t = pickInto && getSession(pickInto);
+  return t && t.status === 'template' ? t : null;
+}
+/** לאן חוזרים אחרי הבחירה, ואיך קוראים ליעד בהודעה. מנקה את היעד. */
+export function pickDone() {
+  const t = target();
+  pickInto = null;
+  return t ? { href: '#/v/p/' + t.id, where: 'לתבנית' } : { href: '#/v/a', where: 'לאימון הקרוב' };
+}
+
+/** מהספרייה: הבחירה, או "+ לאימון" בנגן. מחזירה כמה נוספו.
+    toPlan — תמיד לאימון הקרוב, גם באמצע בחירה לתבנית: הנגן אומר "לאימון". */
+export function addVideosToPlan(ids, toPlan) {
   if (readOnly() || !ids || !ids.length) return 0;
-  const s = ensurePlan();
+  const s = (!toPlan && target()) || ensurePlan();
   let n = 0;
   for (const id of ids) {
     const v = getVideo(id);
@@ -145,18 +161,22 @@ function planOnly(d, keepId) {
 /** add: מוסיפים לאימון הקרוב; אחרת — הוא נבנה מחדש מהאימון הזה */
 function duplicate(from, add) {
   const drills = from.drills.map(d => planOnly(d));
+  /* שם של תבנית הוא שם של אימון ("בעיטות לשער"); שם ביומן הוא כמעט תמיד
+     "אימון שלישי", ואין טעם לגרור אותו לאימון של יום אחר */
+  const title = from.status === 'template' ? from.title || '' : '';
   const plan = upcoming();
   if (plan) {
     if (add) plan.drills.push(...drills);
     else {
       plan.drills = drills;
       plan.goal = from.goal || '';
+      if (title) plan.title = title;
       if (plan.startedAt) resetRun(plan);
     }
     putSession(plan);
     return plan;
   }
-  return newSession({ date: today(), goal: from.goal || '', drills });
+  return newSession({ date: today(), title, goal: from.goal || '', drills });
 }
 
 /** שכפול לאימון הקרוב. יש בו כבר תרגילים — שואלים: להוסיף, או במקומם */
@@ -166,7 +186,7 @@ function copyInto(from, after) {
   if (!plan || !plan.drills.length) { go(false); return; }
   sheet('שכפול לאימון הקרוב', (body, close) => {
     body.append(
-      el('p.hint', { text: 'ב"' + titleOf(plan) + '" יש כבר ' + plan.drills.length + ' תרגילים. מה לעשות עם ' + from.drills.length + ' התרגילים של ' + titleOf(from) + ' ' + shortDate(from.date) + '?' }),
+      el('p.hint', { text: 'ב"' + titleOf(plan) + '" יש כבר ' + plan.drills.length + ' תרגילים. מה לעשות עם ' + from.drills.length + ' התרגילים של ' + (from.status === 'template' ? 'התבנית "' + tplName(from) + '"' : titleOf(from) + ' ' + shortDate(from.date)) + '?' }),
       el('button.btn.gold.wide', { type: 'button', text: 'להוסיף אותם', onclick: () => { close(); go(true); } }),
       el('button.btn.wide', { type: 'button', text: 'במקום מה שיש', onclick: () => { close(); go(false); } }));
   });
@@ -181,6 +201,84 @@ function pickPast(past, after) {
       el('span.name', null, el('b', { text: titleOf(x) }), el('small', { text: x.drills.length + ' תרגילים' + (x.goal ? ' · ' + x.goal : '') })))));
     body.appendChild(list);
   });
+}
+
+/* --- תבניות --- */
+
+const tplName = s => s.title || 'תבנית בלי שם';
+const tplLine = s => [s.drills.length + (s.drills.length === 1 ? ' תרגיל' : ' תרגילים'), s.drills.length ? totalText(s) : '', s.goal].filter(Boolean).join(' · ');
+
+/** מאיזו תבנית לבנות את האימון הקרוב */
+function pickTemplate(after) {
+  sheet('בנייה מתבנית', (body, close) => {
+    const list = el('div.rows');
+    templates().forEach(x => list.appendChild(el('button.mr.jpick', { type: 'button', onclick: () => { close(); afterLayers(() => copyInto(x, after)); } },
+      el('span.name', null, el('b', { text: tplName(x) }), el('small', { text: tplLine(x) })))));
+    body.append(list, el('a.btn.quiet.sm', { href: '#/v/p', onclick: () => close() }, icon('cone'), 'ניהול התבניות'));
+  });
+}
+
+/** שמירה של אימון (הקרוב, או אחד מהיומן) כתבנית. אותו שם — מעדכנים את
+    התבנית הקיימת, כי "שמירה כתבנית" אחרי שינוי היא כמעט תמיד עדכון שלה */
+function saveAsTemplate(from) {
+  sheet('שמירה כתבנית', (body, close) => {
+    const name = el('input.inp', { type: 'text', id: 'tpl-name', 'aria-label': 'שם התבנית', placeholder: 'שם — למשל בעיטות לשער' });
+    name.value = from.title || '';
+    const same = () => templates().find(t => fold(t.title) === fold(name.value) && fold(name.value));
+    const note = el('p.hint');
+    const go = el('button.btn.gold.wide', { type: 'button' });
+    const check = () => {
+      const t = same();
+      note.textContent = t ? 'יש כבר תבנית בשם הזה — התרגילים שלה יוחלפו בתרגילים של האימון הזה.' : from.drills.length + ' תרגילים יישמרו בלי זמנים ובלי תוצאות.';
+      go.textContent = t ? 'לעדכן את התבנית' : 'לשמור תבנית';
+    };
+    name.oninput = check;
+    go.onclick = () => {
+      const drills = from.drills.map(d => planOnly(d));
+      const t = same();
+      if (t) { t.drills = drills; t.goal = from.goal || t.goal || ''; putSession(t); }
+      else newSession({ status: 'template', title: name.value.trim(), goal: from.goal || '', drills });
+      syncNow();
+      close();
+      toast(t ? 'התבנית עודכנה' : 'נשמר כתבנית', { label: 'לתבניות', run: () => { location.hash = '#/v/p'; } });
+    };
+    check();
+    body.append(name, note, go);
+    setTimeout(() => name.focus(), 50);
+  });
+}
+
+/** #/v/p — רשימת התבניות */
+export function mountTemplates(root) {
+  reload();
+  document.title = 'תבניות אימון — תשיעיות';
+  const viewer = readOnly();
+  function paint() {
+    root.textContent = '';
+    root.appendChild(el('a.back', { href: '#/v' }, icon('back'), 'חזרה לסרטונים'));
+    const all = templates();
+    root.appendChild(pageHead('cone', 'תבניות אימון', all.length ? all.length + (all.length === 1 ? ' תבנית' : ' תבניות') : 'אימונים קבועים שחוזרים עליהם'));
+    if (all.length) {
+      const box = el('div.card.rows');
+      all.forEach(t => box.appendChild(el('div.mr.tplrow', null,
+        el('a.tplmain', { href: '#/v/p/' + t.id }, el('span.name', null, el('b', { text: tplName(t) }), el('small.num', { text: tplLine(t) }))),
+        viewer || !t.drills.length ? null : el('button.btn.sm', { type: 'button', onclick: () => copyInto(t, () => afterLayers(() => { location.hash = '#/v/a'; })) }, icon('play'), 'לאימון'))));
+      root.appendChild(box);
+    } else {
+      root.appendChild(el('p.hint', { text: viewer ? 'המאמן עוד לא שמר תבניות.' : 'תבנית היא אימון שחוזרים עליו — "טכניקה", "כושר", "בעיטות לשער". בונים אותה פעם אחת, וכל הפעלה מעתיקה אותה לאימון הקרוב. התבנית עצמה נשארת כמו שהיא.' }));
+    }
+    if (viewer) return;
+    root.appendChild(el('button.btn.gold.wide', { type: 'button', onclick: () => {
+      const t = newSession({ status: 'template' });
+      syncNow();
+      location.hash = '#/v/p/' + t.id;
+    } }, icon('plus'), 'תבנית חדשה'));
+    const plan = upcoming();
+    if (plan && plan.drills.length) root.appendChild(el('button.btn', { type: 'button', onclick: () => saveAsTemplate(plan) }, icon('watch'), 'מהאימון הקרוב — ' + titleOf(plan)));
+  }
+  paint();
+  const off = onSync(ch => { if (ch && !root.hidden && !document.querySelector('.sheet.on')) paint(); });
+  return { destroy() { off(); root.textContent = ''; } };
 }
 
 /** חזרה לפני האימון: בלי זמנים ובלי תוצאות, אותם תרגילים */
@@ -200,10 +298,11 @@ function pageHead(ic, title, sub) {
     el('div', null, el('h1', { text: title }), sub ? el('p', { text: sub }) : null));
 }
 
-/** #/v/a */
-export function mountPlan(root) {
+/** #/v/a — האימון הקרוב; #/v/p/<id> — עריכת תבנית, באותו מסך בלי ההרצה */
+export function mountPlan(root, tplId) {
   reload();
-  document.title = 'האימון הקרוב — תשיעיות';
+  const tpl = !!tplId;
+  document.title = (tpl ? 'תבנית' : 'האימון הקרוב') + ' — תשיעיות';
   const viewer = readOnly();
   let s = null;
   let sureDelete = false;
@@ -214,14 +313,27 @@ export function mountPlan(root) {
   };
 
   function paint() {
-    s = upcoming();
+    s = tpl ? getSession(tplId) : upcoming();
     root.textContent = '';
-    root.appendChild(el('a.back', { href: '#/v' }, icon('back'), 'חזרה לסרטונים'));
+    root.appendChild(tpl ? el('a.back', { href: '#/v/p' }, icon('back'), 'חזרה לתבניות') : el('a.back', { href: '#/v' }, icon('back'), 'חזרה לסרטונים'));
+    if (tpl && (!s || s.status !== 'template')) {
+      root.appendChild(pageHead('cone', 'התבנית לא נמצאה', 'אולי נמחקה במכשיר אחר'));
+      root.appendChild(el('a.btn', { href: '#/v/p' }, icon('cone'), 'לרשימת התבניות'));
+      return;
+    }
     if (!s) { empty(); return; }
 
     const head = el('div.plan-head');
     if (viewer) {
-      head.append(el('h1.plan-title', { text: titleOf(s) }), el('p.plan-goal', { text: [shortDate(s.date), s.goal].filter(Boolean).join(' · ') }));
+      head.append(el('h1.plan-title', { text: tpl ? tplName(s) : titleOf(s) }), el('p.plan-goal', { text: [tpl ? '' : shortDate(s.date), s.goal].filter(Boolean).join(' · ') }));
+    } else if (tpl) {
+      const title = el('input.plan-title', { type: 'text', id: 'tp-title', 'aria-label': 'שם התבנית', placeholder: 'שם התבנית' });
+      title.value = s.title || '';
+      title.onchange = () => { s.title = title.value.trim(); save(); };
+      const goal = el('input.inp', { type: 'text', id: 'tp-goal', 'aria-label': 'מטרה', placeholder: 'מטרה — למשל רגל חלשה וקבלה' });
+      goal.value = s.goal || '';
+      goal.onchange = () => { s.goal = goal.value.trim(); save(); };
+      head.append(title, goal, el('p.hint', { text: 'תבנית — שינוי כאן לא נוגע באימון הקרוב. "לאימון הקרוב" מעתיק אותה אליו.' }));
     } else {
       const title = el('input.plan-title', { type: 'text', id: 'tp-title', 'aria-label': 'שם האימון', placeholder: titleOf(Object.assign({}, s, { title: '' })) });
       title.value = s.title || '';
@@ -246,12 +358,14 @@ export function mountPlan(root) {
     if (!n) list.appendChild(el('p.hint.pad', { text: 'עוד אין תרגילים. מוסיפים מהסרטונים, או תרגיל בלי סרטון.' }));
     root.appendChild(list);
 
+    if (viewer && tpl) return;
     if (viewer) {
       root.appendChild(el('p.hint', { text: 'את האימון בונה ומעביר המאמן. הסיכום יופיע ביומן.' }));
       root.appendChild(el('a.btn', { href: '#/v/h' }, icon('cup'), 'יומן האימונים'));
       return;
     }
     root.appendChild(addButtons());
+    if (tpl) { tplFoot(n); return; }
     const live = s.startedAt && !s.endedAt;
     if (s.endedAt) {
       /* האימון נגמר ולא נשמר ביומן (יצאו מהסיכום) — חוזרים אליו, לא מתחילים מחדש */
@@ -282,16 +396,35 @@ export function mountPlan(root) {
       paint();
     };
     const past = journal();
+    const tpls = templates();
     root.appendChild(el('div.plan-foot', null,
       el('a.btn.quiet.sm', { href: '#/v/h' }, icon('cup'), 'יומן האימונים'),
       past.length ? el('button.btn.quiet.sm', { type: 'button', text: 'שכפול מאימון קודם', onclick: () => pickPast(past, paint) }) : null,
+      tpls.length ? el('button.btn.quiet.sm', { type: 'button', text: 'מתבנית', onclick: () => pickTemplate(paint) }) : null,
+      n ? el('button.btn.quiet.sm', { type: 'button', text: 'שמירה כתבנית', onclick: () => saveAsTemplate(s) }) : null,
       del));
+  }
+
+  /* בתבנית אין הרצה: "לאימון" מעתיק אותה לאימון הקרוב ועובר אליו */
+  function tplFoot(n) {
+    root.appendChild(el('button.btn.gold.wide.plan-go', { type: 'button', disabled: !n,
+      onclick: () => copyInto(s, () => afterLayers(() => { location.hash = '#/v/a'; })) }, icon('play'), 'לאימון הקרוב מהתבנית'));
+    const del = el('button.btn.quiet.sm', { type: 'button', text: 'מחיקת התבנית' });
+    del.onclick = () => {
+      if (!del.classList.contains('sure')) { del.classList.add('sure'); del.textContent = 'למחוק את התבנית? לחיצה נוספת'; return; }
+      removeSession(s.id);
+      syncNow();
+      toast('התבנית נמחקה');
+      location.hash = '#/v/p';
+    };
+    root.appendChild(el('div.plan-foot', null, el('a.btn.quiet.sm', { href: '#/v/p' }, icon('cone'), 'כל התבניות'), del));
   }
 
   function addButtons() {
     return el('div.plan-add', null,
-      el('button.btn', { type: 'button', onclick: () => pickForTraining() }, icon('plus'), 'מהסרטונים'),
+      el('button.btn', { type: 'button', onclick: () => { pickTarget(tpl ? s.id : null); pickForTraining(); } }, icon('plus'), 'מהסרטונים'),
       el('button.btn', { type: 'button', onclick: () => {
+        if (tpl) { editDrill(s, drillFrom(null), true, save); return; }
         const plan = ensurePlan();
         s = plan;
         editDrill(plan, drillFrom(null), true, save);
@@ -302,11 +435,13 @@ export function mountPlan(root) {
     root.appendChild(pageHead('watch', 'האימון הקרוב', viewer ? 'המאמן עוד לא בנה אימון' : 'בוחרים תרגילים מהסרטונים, או מוסיפים תרגיל בלי סרטון'));
     if (!viewer) {
       root.appendChild(addButtons());
+      if (templates().length) root.appendChild(el('button.btn', { type: 'button', onclick: () => pickTemplate(paint) }, icon('cone'), 'לבנות מתבנית'));
       const last = journal()[0];
       if (last) {
         root.appendChild(el('button.btn', { type: 'button', onclick: () => copyInto(last, paint) },
           icon('sync'), 'לבנות מהאימון האחרון — ' + titleOf(last)));
       }
+      root.appendChild(el('a.btn.quiet', { href: '#/v/p' }, icon('cone'), 'תבניות אימון'));
     }
     root.appendChild(el('a.btn.quiet', { href: '#/v/h' }, icon('cup'), 'יומן האימונים'));
   }
@@ -1034,6 +1169,7 @@ export function mountJournal(root, id) {
     const build = el('button.btn.gold', { type: 'button', onclick: () => copyInto(s, () => afterLayers(() => { location.hash = '#/v/a'; })) },
       icon('sync'), el('span', { text: 'שכפול לאימון הבא' }));
     root.appendChild(build);
+    root.appendChild(el('button.btn', { type: 'button', onclick: () => saveAsTemplate(s) }, icon('cone'), el('span', { text: 'שמירה כתבנית' })));
     const del = el('button.btn.quiet.sm', { type: 'button', text: 'מחיקה מהיומן' });
     del.onclick = () => {
       if (!del.classList.contains('sure')) { del.classList.add('sure'); del.textContent = 'למחוק את האימון מהיומן? לחיצה נוספת'; return; }

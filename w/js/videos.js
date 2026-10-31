@@ -612,6 +612,14 @@ export function journal() {
   return listSessions().filter(x => x.status === 'done').sort((a, b) => (b.endedAt || b.at) - (a.endedAt || a.at));
 }
 
+/** תבניות — אימונים קבועים שלא נגמרים. הפעלה מעתיקה אותן לאימון הקרוב,
+    ולכן התבנית עצמה לא מקבלת תוצאות ולא נכנסת ליומן. גרסאות קודמות של
+    האפליקציה מסננות לפי 'plan' ו-'done' בלבד, ולכן אינן רואות אותן. */
+export function templates() {
+  return listSessions().filter(x => x.status === 'template')
+    .sort((a, b) => (a.title || '').localeCompare(b.title || '', 'he') || a.at - b.at);
+}
+
 export function newSession(fields) {
   if (readOnly()) return null;
   const x = Object.assign({ id: uid(), at: now(), updatedAt: now(), status: 'plan', title: '', date: '', goal: '', note: '', drills: [] }, fields);
