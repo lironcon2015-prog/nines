@@ -16,7 +16,7 @@
    הסרטונים (videos.js). */
 
 import {
-  getVideo, platformName, upcoming, journal, templates, getSession, newSession, putSession, removeSession, newId, readOnly, reload
+  getVideo, platformName, upcoming, journal, templates, listSessions, getSession, newSession, putSession, removeSession, newId, readOnly, reload
 } from './videos.js';
 import { syncNow, onSync } from './sync.js';
 import { el, icon, toast, sheet, openLayer, onEscape, afterLayers } from './ui.js';
@@ -99,56 +99,50 @@ function records(skip) {
   return best;
 }
 
-/* --- האימון הקרוב --- */
+/* --- האימונים השמורים ---
+   אימון שמור (status 'template') הוא רשימת תרגילים שחוזרים עליה. הוא לא
+   מורץ בעצמו: "להתחיל" יוצר ממנו עותק (status 'plan', from = המזהה שלו),
+   ההרצה והתוצאות נרשמות בעותק, והעותק עובר ליומן. כך שינוי במגרש — קיצור
+   תרגיל, מחיקה — נשאר באימון של אותו יום, והשמור נשאר נקי לפעם הבאה
+   (בעל הריפו: "השינוי לא נשמר בתבניות, רק באימון הספציפי").
+
+   הניסיון הקודם היה "אימון קרוב" אחד ותבניות שמעתיקים אליו. זה הוסיף שלב
+   בין הבחירה להרצה, ולא זה מה שנדרש: בוחרים אימון מהשמורים ומריצים אותו. */
 
 function drillFrom(v) {
   return Object.assign({ id: newId(), video: v ? v.id : null, title: v ? v.title : '', note: '' }, START);
 }
 
-function ensurePlan() {
-  return upcoming() || newSession({ date: today() });
+const savedName = s => s.title || 'אימון בלי שם';
+
+/** הפעם האחרונה שהאימון נעשה. לפני האימונים השמורים לא היה `from`, ולכן
+    אימון ישן ביומן מזוהה לפי השם */
+function lastDone(t) {
+  const name = fold(t.title);
+  return journal().find(j => j.from === t.id || (!j.from && name && fold(j.title) === name)) || null;
 }
 
-/* "+ מהסרטונים" מתוך תבנית: הבחירה בספרייה צריכה לחזור אליה ולא לאימון
-   הקרוב. הספרייה היא מסך אחר, ולכן היעד נשמר כאן עד שהבחירה נגמרת. */
-let pickInto = null;
-export function pickTarget(id) { pickInto = id || null; }
-function target() {
-  const t = pickInto && getSession(pickInto);
-  return t && t.status === 'template' ? t : null;
-}
-/** לאן חוזרים אחרי הבחירה, ואיך קוראים ליעד בהודעה. מנקה את היעד. */
-export function pickDone() {
-  const t = target();
-  pickInto = null;
-  return t ? { href: '#/v/p/' + t.id, where: 'לתבנית' } : { href: '#/v/a', where: 'לאימון הקרוב' };
+function savedLine(t) {
+  const n = t.drills.length;
+  const last = lastDone(t);
+  return [n + (n === 1 ? ' תרגיל' : ' תרגילים'), n ? totalText(t) : '', last ? 'נעשה ' + shortDate(last.date) : 'עוד לא נעשה']
+    .filter(Boolean).join(' · ');
 }
 
-/** מהספרייה: הבחירה, או "+ לאימון" בנגן. מחזירה כמה נוספו.
-    toPlan — תמיד לאימון הקרוב, גם באמצע בחירה לתבנית: הנגן אומר "לאימון". */
-export function addVideosToPlan(ids, toPlan) {
-  if (readOnly() || !ids || !ids.length) return 0;
-  const s = (!toPlan && target()) || ensurePlan();
+/* "האימון הקרוב" של הגרסאות הקודמות — וגם אחד שנבנה בטלפון שעוד מריץ
+   גרסה ישנה: כל עוד לא התחיל, הוא אימון שמור. אחד שהתחיל הוא הרצה,
+   וחוזרים אליה מהרשימה. */
+function migrate() {
+  if (readOnly()) return;
   let n = 0;
-  for (const id of ids) {
-    const v = getVideo(id);
-    if (!v) continue;
-    s.drills.push(drillFrom(v));
+  for (const x of listSessions()) {
+    if (x.status !== 'plan' || x.startedAt) continue;
+    x.status = 'template';
+    if (!x.title) x.title = titleOf(x);
+    putSession(x);
     n++;
   }
-  putSession(s);
-  syncNow();
-  return n;
-}
-
-/** מה שכרטיס האימון בראש הספרייה צריך */
-export function planCard() {
-  const s = upcoming();
-  if (!s) return null;
-  return {
-    title: titleOf(s), date: shortDate(s.date), count: s.drills.length,
-    total: s.drills.length ? totalText(s) : '', live: !!(s.startedAt && !s.endedAt)
-  };
+  if (n) syncNow();
 }
 
 /* תרגיל בלי מה שקרה בו: רק המה, לא התוצאה */
@@ -158,138 +152,103 @@ function planOnly(d, keepId) {
   return c;
 }
 
-/** add: מוסיפים לאימון הקרוב; אחרת — הוא נבנה מחדש מהאימון הזה */
-function duplicate(from, add) {
-  const drills = from.drills.map(d => planOnly(d));
-  /* שם של תבנית הוא שם של אימון ("בעיטות לשער"); שם ביומן הוא כמעט תמיד
-     "אימון שלישי", ואין טעם לגרור אותו לאימון של יום אחר */
-  const title = from.status === 'template' ? from.title || '' : '';
-  const plan = upcoming();
-  if (plan) {
-    if (add) plan.drills.push(...drills);
-    else {
-      plan.drills = drills;
-      plan.goal = from.goal || '';
-      if (title) plan.title = title;
-      if (plan.startedAt) resetRun(plan);
+/* "+ מהסרטונים" מתוך אימון שמור: הבחירה בספרייה חוזרת אליו בלי לשאול.
+   הספרייה היא מסך אחר, ולכן היעד נשמר כאן עד שהבחירה נגמרת. */
+let pickInto = null;
+export function pickTarget(id) { pickInto = id || null; }
+function target() {
+  const t = pickInto && getSession(pickInto);
+  return t && t.status === 'template' ? t : null;
+}
+
+/** סרטונים מהספרייה או מהנגן לאימון שמור. אם לא הגיעו מאימון מסוים —
+    שואלים לאיזה. done(href, הודעה) נקרא אחרי ההוספה. */
+export function addVideosToSaved(ids, done) {
+  if (readOnly() || !ids || !ids.length) return;
+  const finish = t => {
+    let n = 0;
+    for (const id of ids) {
+      const v = getVideo(id);
+      if (!v) continue;
+      t.drills.push(drillFrom(v));
+      n++;
     }
-    putSession(plan);
-    return plan;
-  }
-  return newSession({ date: today(), title, goal: from.goal || '', drills });
+    putSession(t);
+    syncNow();
+    pickInto = null;
+    if (done) done('#/v/a/' + t.id, (n === 1 ? 'נוסף ל"' : n + ' נוספו ל"') + savedName(t) + '"');
+  };
+  const t = target();
+  if (t) { finish(t); return; }
+  sheet(ids.length === 1 ? 'להוסיף לאימון…' : 'להוסיף ' + ids.length + ' סרטונים לאימון…', (body, close) => {
+    const list = el('div.rows');
+    templates().forEach(x => list.appendChild(el('button.mr.jpick', { type: 'button', onclick: () => { close(); afterLayers(() => finish(x)); } },
+      el('span.name', null, el('b', { text: savedName(x) }), el('small', { text: savedLine(x) })))));
+    body.append(list, el('button.btn.wide', { type: 'button', onclick: () => { close(); afterLayers(() => finish(newSession({ status: 'template' }))); } }, icon('plus'), 'אימון חדש'));
+  });
 }
 
-/** שכפול לאימון הקרוב. יש בו כבר תרגילים — שואלים: להוסיף, או במקומם */
-function copyInto(from, after) {
-  const plan = upcoming();
-  const go = add => { duplicate(from, add); syncNow(); toast(add ? 'התרגילים נוספו לאימון הקרוב' : 'האימון הקרוב מוכן לעריכה'); if (after) after(); };
-  if (!plan || !plan.drills.length) { go(false); return; }
-  sheet('שכפול לאימון הקרוב', (body, close) => {
+/** מה שכרטיס האימונים בראש הספרייה צריך */
+export function savedCard() {
+  migrate();
+  const run = upcoming();
+  const last = journal()[0];
+  return {
+    count: templates().length,
+    last: last ? titleOf(last) + ', ' + shortDate(last.date) : '',
+    run: run ? titleOf(run) : ''
+  };
+}
+
+/** להתחיל אימון שמור: עותק נקי ממנו, וההרצה עליו. יש הרצה פתוחה — שואלים. */
+function startSaved(t, after) {
+  if (readOnly() || !t.drills.length) return;
+  const go = () => {
+    const s = newSession({ from: t.id, title: t.title || '', goal: t.goal || '', date: today(), drills: t.drills.map(d => planOnly(d)) });
+    startLive(s, after);
+  };
+  const run = upcoming();
+  if (!run) { go(); return; }
+  sheet('יש אימון באמצע', (body, close) => {
     body.append(
-      el('p.hint', { text: 'ב"' + titleOf(plan) + '" יש כבר ' + plan.drills.length + ' תרגילים. מה לעשות עם ' + from.drills.length + ' התרגילים של ' + (from.status === 'template' ? 'התבנית "' + tplName(from) + '"' : titleOf(from) + ' ' + shortDate(from.date)) + '?' }),
-      el('button.btn.gold.wide', { type: 'button', text: 'להוסיף אותם', onclick: () => { close(); go(true); } }),
-      el('button.btn.wide', { type: 'button', text: 'במקום מה שיש', onclick: () => { close(); go(false); } }));
+      el('p.hint', { text: '"' + titleOf(run) + '" התחיל ועוד לא נשמר ביומן.' }),
+      el('button.btn.gold.wide', { type: 'button', text: run.endedAt ? 'לסיכום שלו' : 'להמשיך אותו', onclick: () => { close(); afterLayers(() => resume(run, after)); } }),
+      el('button.btn.wide', { type: 'button', text: 'לבטל אותו ולהתחיל את "' + savedName(t) + '"', onclick: () => { close(); removeSession(run.id); syncNow(); afterLayers(go); } }));
   });
 }
 
-/** מאיזה אימון ביומן לשכפל */
-function pickPast(past, after) {
-  sheet('שכפול מאימון קודם', (body, close) => {
-    const list = el('div.rows');
-    past.slice(0, 12).forEach(x => list.appendChild(el('button.mr.jpick', { type: 'button', onclick: () => { close(); afterLayers(() => copyInto(x, after)); } },
-      el('span.jdate.num', { text: shortDate(x.date) }),
-      el('span.name', null, el('b', { text: titleOf(x) }), el('small', { text: x.drills.length + ' תרגילים' + (x.goal ? ' · ' + x.goal : '') })))));
-    body.appendChild(list);
-  });
+function resume(run, after) {
+  if (run.endedAt) openSummary(run, after); else startLive(run, after);
 }
 
-/* --- תבניות --- */
-
-const tplName = s => s.title || 'תבנית בלי שם';
-const tplLine = s => [s.drills.length + (s.drills.length === 1 ? ' תרגיל' : ' תרגילים'), s.drills.length ? totalText(s) : '', s.goal].filter(Boolean).join(' · ');
-
-/** מאיזו תבנית לבנות את האימון הקרוב */
-function pickTemplate(after) {
-  sheet('בנייה מתבנית', (body, close) => {
-    const list = el('div.rows');
-    templates().forEach(x => list.appendChild(el('button.mr.jpick', { type: 'button', onclick: () => { close(); afterLayers(() => copyInto(x, after)); } },
-      el('span.name', null, el('b', { text: tplName(x) }), el('small', { text: tplLine(x) })))));
-    body.append(list, el('a.btn.quiet.sm', { href: '#/v/p', onclick: () => close() }, icon('cone'), 'ניהול התבניות'));
-  });
-}
-
-/** שמירה של אימון (הקרוב, או אחד מהיומן) כתבנית. אותו שם — מעדכנים את
-    התבנית הקיימת, כי "שמירה כתבנית" אחרי שינוי היא כמעט תמיד עדכון שלה */
+/** שמירה של אימון מהיומן כאימון שמור. אותו שם — מעדכנים את הקיים, כי
+    שמירה אחרי שינוי היא כמעט תמיד עדכון שלו, והגיליון אומר את זה מראש */
 function saveAsTemplate(from) {
-  sheet('שמירה כתבנית', (body, close) => {
-    const name = el('input.inp', { type: 'text', id: 'tpl-name', 'aria-label': 'שם התבנית', placeholder: 'שם — למשל בעיטות לשער' });
+  sheet('שמירה כאימון שמור', (body, close) => {
+    const name = el('input.inp', { type: 'text', id: 'tpl-name', 'aria-label': 'שם האימון', placeholder: 'שם — למשל בעיטות לשער' });
     name.value = from.title || '';
-    const same = () => templates().find(t => fold(t.title) === fold(name.value) && fold(name.value));
+    const same = () => fold(name.value) && templates().find(t => fold(t.title) === fold(name.value));
     const note = el('p.hint');
     const go = el('button.btn.gold.wide', { type: 'button' });
     const check = () => {
       const t = same();
-      note.textContent = t ? 'יש כבר תבנית בשם הזה — התרגילים שלה יוחלפו בתרגילים של האימון הזה.' : from.drills.length + ' תרגילים יישמרו בלי זמנים ובלי תוצאות.';
-      go.textContent = t ? 'לעדכן את התבנית' : 'לשמור תבנית';
+      note.textContent = t ? 'יש כבר אימון שמור בשם הזה — התרגילים שלו יוחלפו בתרגילים האלה.' : from.drills.length + ' תרגילים יישמרו בלי זמנים ובלי תוצאות.';
+      go.textContent = t ? 'לעדכן את האימון השמור' : 'לשמור';
     };
     name.oninput = check;
     go.onclick = () => {
       const drills = from.drills.map(d => planOnly(d));
-      const t = same();
+      let t = same();
       if (t) { t.drills = drills; t.goal = from.goal || t.goal || ''; putSession(t); }
-      else newSession({ status: 'template', title: name.value.trim(), goal: from.goal || '', drills });
+      else t = newSession({ status: 'template', title: name.value.trim(), goal: from.goal || '', drills });
       syncNow();
       close();
-      toast(t ? 'התבנית עודכנה' : 'נשמר כתבנית', { label: 'לתבניות', run: () => { location.hash = '#/v/p'; } });
+      toast(same() && t.at !== Date.now() ? 'האימון השמור עודכן' : 'נשמר באימונים השמורים', { label: 'לאימון', run: () => { location.hash = '#/v/a/' + t.id; } });
     };
     check();
     body.append(name, note, go);
     setTimeout(() => name.focus(), 50);
   });
-}
-
-/** #/v/p — רשימת התבניות */
-export function mountTemplates(root) {
-  reload();
-  document.title = 'תבניות אימון — תשיעיות';
-  const viewer = readOnly();
-  function paint() {
-    root.textContent = '';
-    root.appendChild(el('a.back', { href: '#/v' }, icon('back'), 'חזרה לסרטונים'));
-    const all = templates();
-    root.appendChild(pageHead('cone', 'תבניות אימון', all.length ? all.length + (all.length === 1 ? ' תבנית' : ' תבניות') : 'אימונים קבועים שחוזרים עליהם'));
-    if (all.length) {
-      const box = el('div.card.rows');
-      all.forEach(t => box.appendChild(el('div.mr.tplrow', null,
-        el('a.tplmain', { href: '#/v/p/' + t.id }, el('span.name', null, el('b', { text: tplName(t) }), el('small.num', { text: tplLine(t) }))),
-        viewer || !t.drills.length ? null : el('button.btn.sm', { type: 'button', onclick: () => copyInto(t, () => afterLayers(() => { location.hash = '#/v/a'; })) }, icon('play'), 'לאימון'))));
-      root.appendChild(box);
-    } else {
-      root.appendChild(el('p.hint', { text: viewer ? 'המאמן עוד לא שמר תבניות.' : 'תבנית היא אימון שחוזרים עליו — "טכניקה", "כושר", "בעיטות לשער". בונים אותה פעם אחת, וכל הפעלה מעתיקה אותה לאימון הקרוב. התבנית עצמה נשארת כמו שהיא.' }));
-    }
-    if (viewer) return;
-    root.appendChild(el('button.btn.gold.wide', { type: 'button', onclick: () => {
-      const t = newSession({ status: 'template' });
-      syncNow();
-      location.hash = '#/v/p/' + t.id;
-    } }, icon('plus'), 'תבנית חדשה'));
-    const plan = upcoming();
-    if (plan && plan.drills.length) root.appendChild(el('button.btn', { type: 'button', onclick: () => saveAsTemplate(plan) }, icon('watch'), 'מהאימון הקרוב — ' + titleOf(plan)));
-  }
-  paint();
-  const off = onSync(ch => { if (ch && !root.hidden && !document.querySelector('.sheet.on')) paint(); });
-  return { destroy() { off(); root.textContent = ''; } };
-}
-
-/** חזרה לפני האימון: בלי זמנים ובלי תוצאות, אותם תרגילים */
-function resetRun(s) {
-  s.startedAt = 0;
-  s.endedAt = 0;
-  s.totalSecs = 0;
-  s.activeSecs = 0;
-  s.liveAt = 0;
-  s.cur = 0;
-  s.drills = s.drills.map(d => planOnly(d, true));
 }
 
 function pageHead(ic, title, sub) {
@@ -298,11 +257,66 @@ function pageHead(ic, title, sub) {
     el('div', null, el('h1', { text: title }), sub ? el('p', { text: sub }) : null));
 }
 
-/** #/v/a — האימון הקרוב; #/v/p/<id> — עריכת תבנית, באותו מסך בלי ההרצה */
-export function mountPlan(root, tplId) {
+/** #/v/a — האימונים השמורים */
+export function mountSaved(root) {
   reload();
-  const tpl = !!tplId;
-  document.title = (tpl ? 'תבנית' : 'האימון הקרוב') + ' — תשיעיות';
+  migrate();
+  document.title = 'האימונים השמורים — תשיעיות';
+  const viewer = readOnly();
+
+  function paint() {
+    root.textContent = '';
+    root.appendChild(el('a.back', { href: '#/v' }, icon('back'), 'חזרה לסרטונים'));
+    const all = templates();
+    root.appendChild(pageHead('watch', 'האימונים השמורים', all.length ? all.length + (all.length === 1 ? ' אימון' : ' אימונים') : 'בונים פעם אחת, ובוחרים מהם בכל אימון'));
+    const run = upcoming();
+    if (run && !viewer) root.appendChild(runCard(run));
+    if (all.length) {
+      const box = el('div.card.rows');
+      all.forEach(t => box.appendChild(el('div.mr.tplrow', null,
+        el('a.tplmain', { href: '#/v/a/' + t.id }, el('span.name', null, el('b', { text: savedName(t) }), el('small.num', { text: savedLine(t) }))),
+        viewer || !t.drills.length ? null : el('button.btn.sm', { type: 'button', onclick: () => startSaved(t, paint) }, icon('play'), 'להתחיל'))));
+      root.appendChild(box);
+    } else {
+      root.appendChild(el('p.hint', { text: viewer ? 'המאמן עוד לא שמר אימונים.' : 'אימון שמור הוא רשימת תרגילים שחוזרים עליה — "טכניקה", "כושר", "בעיטות לשער". בכל אימון בוחרים אחד מהם ומתחילים. הסיכום נכנס ליומן, והאימון השמור נשאר כמו שהוא.' }));
+    }
+    if (!viewer) {
+      root.appendChild(el('button.btn.gold.wide', { type: 'button', onclick: () => {
+        const t = newSession({ status: 'template' });
+        syncNow();
+        location.hash = '#/v/a/' + t.id;
+      } }, icon('plus'), 'אימון חדש'));
+    }
+    root.appendChild(el('a.btn.quiet', { href: '#/v/h' }, icon('cup'), 'יומן האימונים'));
+  }
+
+  /* הרצה שלא נשמרה ביומן: יצאו באמצע, או מהסיכום בלי לשמור */
+  function runCard(run) {
+    const drop = el('button.btn.quiet.sm', { type: 'button', text: 'לבטל' });
+    drop.onclick = () => {
+      if (!drop.classList.contains('sure')) { drop.classList.add('sure'); drop.textContent = 'לבטל את האימון הזה? לחיצה נוספת'; return; }
+      removeSession(run.id);
+      syncNow();
+      toast('האימון בוטל');
+      paint();
+    };
+    const done = run.drills.filter(d => d.done).length;
+    return el('div.tcard.runcard', null,
+      el('span.ttx', null, el('b', { text: 'באמצע · ' + titleOf(run) }), el('small.num', { text: done + ' מתוך ' + run.drills.length + ' תרגילים' + (run.activeSecs ? ' · ' + clock(run.activeSecs) : '') })),
+      el('div.tacts', null,
+        el('button.btn.gold.sm', { type: 'button', onclick: () => resume(run, paint) }, icon(run.endedAt ? 'check' : 'play'), run.endedAt ? 'לסיכום ושמירה ביומן' : 'להמשיך'),
+        drop));
+  }
+
+  paint();
+  const off = onSync(ch => { if (ch && !root.hidden && !document.querySelector('.sheet.on, .live')) paint(); });
+  return { destroy() { off(); root.textContent = ''; } };
+}
+
+/** #/v/a/<id> — אימון שמור: עורכים אותו, ומתחילים ממנו */
+export function mountPlan(root, id) {
+  reload();
+  migrate();
   const viewer = readOnly();
   let s = null;
   let sureDelete = false;
@@ -313,137 +327,67 @@ export function mountPlan(root, tplId) {
   };
 
   function paint() {
-    s = tpl ? getSession(tplId) : upcoming();
+    s = getSession(id);
     root.textContent = '';
-    root.appendChild(tpl ? el('a.back', { href: '#/v/p' }, icon('back'), 'חזרה לתבניות') : el('a.back', { href: '#/v' }, icon('back'), 'חזרה לסרטונים'));
-    if (tpl && (!s || s.status !== 'template')) {
-      root.appendChild(pageHead('cone', 'התבנית לא נמצאה', 'אולי נמחקה במכשיר אחר'));
-      root.appendChild(el('a.btn', { href: '#/v/p' }, icon('cone'), 'לרשימת התבניות'));
+    root.appendChild(el('a.back', { href: '#/v/a' }, icon('back'), 'האימונים השמורים'));
+    if (!s || s.status !== 'template') {
+      document.title = 'האימונים השמורים — תשיעיות';
+      root.appendChild(pageHead('watch', 'האימון לא נמצא', 'אולי נמחק במכשיר אחר'));
+      root.appendChild(el('a.btn', { href: '#/v/a' }, icon('watch'), 'לאימונים השמורים'));
       return;
     }
-    if (!s) { empty(); return; }
+    document.title = savedName(s) + ' — תשיעיות';
 
     const head = el('div.plan-head');
     if (viewer) {
-      head.append(el('h1.plan-title', { text: tpl ? tplName(s) : titleOf(s) }), el('p.plan-goal', { text: [tpl ? '' : shortDate(s.date), s.goal].filter(Boolean).join(' · ') }));
-    } else if (tpl) {
-      const title = el('input.plan-title', { type: 'text', id: 'tp-title', 'aria-label': 'שם התבנית', placeholder: 'שם התבנית' });
-      title.value = s.title || '';
-      title.onchange = () => { s.title = title.value.trim(); save(); };
-      const goal = el('input.inp', { type: 'text', id: 'tp-goal', 'aria-label': 'מטרה', placeholder: 'מטרה — למשל רגל חלשה וקבלה' });
-      goal.value = s.goal || '';
-      goal.onchange = () => { s.goal = goal.value.trim(); save(); };
-      head.append(title, goal, el('p.hint', { text: 'תבנית — שינוי כאן לא נוגע באימון הקרוב. "לאימון הקרוב" מעתיק אותה אליו.' }));
+      head.append(el('h1.plan-title', { text: savedName(s) }), s.goal ? el('p.plan-goal', { text: s.goal }) : '');
     } else {
-      const title = el('input.plan-title', { type: 'text', id: 'tp-title', 'aria-label': 'שם האימון', placeholder: titleOf(Object.assign({}, s, { title: '' })) });
+      const title = el('input.plan-title', { type: 'text', id: 'tp-title', 'aria-label': 'שם האימון', placeholder: 'שם האימון — למשל בעיטות לשער' });
       title.value = s.title || '';
       title.onchange = () => { s.title = title.value.trim(); save(); };
-      const date = el('input.inp.plan-date', { type: 'date', id: 'tp-date', 'aria-label': 'תאריך' });
-      date.value = s.date || '';
-      date.onchange = () => { s.date = date.value; save(true); };
       const goal = el('input.inp', { type: 'text', id: 'tp-goal', 'aria-label': 'מטרה', placeholder: 'מטרה — למשל רגל חלשה וקבלה' });
       goal.value = s.goal || '';
       goal.onchange = () => { s.goal = goal.value.trim(); save(); };
-      head.append(title, el('div.row', null, date, goal));
+      head.append(title, goal);
     }
     root.appendChild(head);
 
     const n = s.drills.length;
+    const last = lastDone(s);
     root.appendChild(el('div.plan-sum', null,
       el('span.chip.num', { 'aria-pressed': 'true', text: n + (n === 1 ? ' תרגיל' : ' תרגילים') }),
-      n ? el('span.chip.num', { 'aria-pressed': 'true', text: totalText(s) }) : null));
+      n ? el('span.chip.num', { 'aria-pressed': 'true', text: totalText(s) }) : null,
+      last ? el('a.chip.num', { href: '#/v/h/' + last.id, text: 'נעשה ' + shortDate(last.date) }) : null));
 
     const list = el('div.card.rows.drills');
     s.drills.forEach(d => list.appendChild(drillRow(d)));
     if (!n) list.appendChild(el('p.hint.pad', { text: 'עוד אין תרגילים. מוסיפים מהסרטונים, או תרגיל בלי סרטון.' }));
     root.appendChild(list);
+    if (viewer) return;
 
-    if (viewer && tpl) return;
-    if (viewer) {
-      root.appendChild(el('p.hint', { text: 'את האימון בונה ומעביר המאמן. הסיכום יופיע ביומן.' }));
-      root.appendChild(el('a.btn', { href: '#/v/h' }, icon('cup'), 'יומן האימונים'));
-      return;
-    }
-    root.appendChild(addButtons());
-    if (tpl) { tplFoot(n); return; }
-    const live = s.startedAt && !s.endedAt;
-    if (s.endedAt) {
-      /* האימון נגמר ולא נשמר ביומן (יצאו מהסיכום) — חוזרים אליו, לא מתחילים מחדש */
-      root.appendChild(el('button.btn.gold.wide.plan-go', { type: 'button', onclick: () => openSummary(s, paint) }, icon('check'), 'לסיכום ושמירה ביומן'));
-      root.appendChild(el('button.btn.quiet.sm', { type: 'button', text: 'חזרה לאימון', onclick: () => startLive(s, paint) }));
-    } else {
-      root.appendChild(el('button.btn.gold.wide.plan-go', { type: 'button', disabled: !n, onclick: () => startLive(s, paint) },
-        icon('play'), live ? 'להמשיך את האימון' : 'להתחיל אימון'));
-    }
-    if (s.startedAt) {
-      /* נכנסו לבדוק, או שהאימון נקטע — מאפסים זמנים ותוצאות, והתרגילים נשארים */
-      const again = el('button.btn.quiet.sm', { type: 'button', text: 'להתחיל מחדש' });
-      again.onclick = () => {
-        if (!again.classList.contains('sure')) { again.classList.add('sure'); again.textContent = 'לאפס את הזמנים והתוצאות? לחיצה נוספת'; return; }
-        resetRun(s);
-        save(true);
-        toast('האימון אופס — אפשר להתחיל מההתחלה');
-      };
-      root.appendChild(again);
-    }
-    const del = el('button.btn.quiet.sm', { type: 'button', text: sureDelete ? 'למחוק את האימון? לחיצה נוספת מוחקת' : 'מחיקת האימון' });
+    root.appendChild(el('div.plan-add', null,
+      el('button.btn', { type: 'button', onclick: () => { pickTarget(s.id); pickForTraining(); } }, icon('plus'), 'מהסרטונים'),
+      el('button.btn', { type: 'button', onclick: () => editDrill(s, drillFrom(null), true, save) }, icon('plus'), 'תרגיל בלי סרטון')));
+    root.appendChild(el('button.btn.gold.wide.plan-go', { type: 'button', disabled: !n, onclick: () => startSaved(s, paint) },
+      icon('play'), 'להתחיל אימון'));
+    root.appendChild(el('p.hint', { text: 'שינוי באמצע האימון נשאר באימון של אותו יום. כאן משנים את האימון השמור עצמו.' }));
+
+    const copy = el('button.btn.quiet.sm', { type: 'button', text: 'שכפול', onclick: () => {
+      const c = newSession({ status: 'template', title: savedName(s) + ' — עותק', goal: s.goal || '', drills: s.drills.map(d => planOnly(d)) });
+      syncNow();
+      toast('נוצר עותק');
+      location.hash = '#/v/a/' + c.id;
+    } });
+    const del = el('button.btn.quiet.sm', { type: 'button', text: sureDelete ? 'למחוק את האימון? לחיצה נוספת מוחקת' : 'מחיקה' });
     del.onclick = () => {
       if (!sureDelete) { sureDelete = true; del.textContent = 'למחוק את האימון? לחיצה נוספת מוחקת'; return; }
       sureDelete = false;
       removeSession(s.id);
       syncNow();
-      toast('האימון נמחק');
-      paint();
+      toast('האימון נמחק — היומן לא השתנה');
+      location.hash = '#/v/a';
     };
-    const past = journal();
-    const tpls = templates();
-    root.appendChild(el('div.plan-foot', null,
-      el('a.btn.quiet.sm', { href: '#/v/h' }, icon('cup'), 'יומן האימונים'),
-      past.length ? el('button.btn.quiet.sm', { type: 'button', text: 'שכפול מאימון קודם', onclick: () => pickPast(past, paint) }) : null,
-      tpls.length ? el('button.btn.quiet.sm', { type: 'button', text: 'מתבנית', onclick: () => pickTemplate(paint) }) : null,
-      n ? el('button.btn.quiet.sm', { type: 'button', text: 'שמירה כתבנית', onclick: () => saveAsTemplate(s) }) : null,
-      del));
-  }
-
-  /* בתבנית אין הרצה: "לאימון" מעתיק אותה לאימון הקרוב ועובר אליו */
-  function tplFoot(n) {
-    root.appendChild(el('button.btn.gold.wide.plan-go', { type: 'button', disabled: !n,
-      onclick: () => copyInto(s, () => afterLayers(() => { location.hash = '#/v/a'; })) }, icon('play'), 'לאימון הקרוב מהתבנית'));
-    const del = el('button.btn.quiet.sm', { type: 'button', text: 'מחיקת התבנית' });
-    del.onclick = () => {
-      if (!del.classList.contains('sure')) { del.classList.add('sure'); del.textContent = 'למחוק את התבנית? לחיצה נוספת'; return; }
-      removeSession(s.id);
-      syncNow();
-      toast('התבנית נמחקה');
-      location.hash = '#/v/p';
-    };
-    root.appendChild(el('div.plan-foot', null, el('a.btn.quiet.sm', { href: '#/v/p' }, icon('cone'), 'כל התבניות'), del));
-  }
-
-  function addButtons() {
-    return el('div.plan-add', null,
-      el('button.btn', { type: 'button', onclick: () => { pickTarget(tpl ? s.id : null); pickForTraining(); } }, icon('plus'), 'מהסרטונים'),
-      el('button.btn', { type: 'button', onclick: () => {
-        if (tpl) { editDrill(s, drillFrom(null), true, save); return; }
-        const plan = ensurePlan();
-        s = plan;
-        editDrill(plan, drillFrom(null), true, save);
-      } }, icon('plus'), 'תרגיל בלי סרטון'));
-  }
-
-  function empty() {
-    root.appendChild(pageHead('watch', 'האימון הקרוב', viewer ? 'המאמן עוד לא בנה אימון' : 'בוחרים תרגילים מהסרטונים, או מוסיפים תרגיל בלי סרטון'));
-    if (!viewer) {
-      root.appendChild(addButtons());
-      if (templates().length) root.appendChild(el('button.btn', { type: 'button', onclick: () => pickTemplate(paint) }, icon('cone'), 'לבנות מתבנית'));
-      const last = journal()[0];
-      if (last) {
-        root.appendChild(el('button.btn', { type: 'button', onclick: () => copyInto(last, paint) },
-          icon('sync'), 'לבנות מהאימון האחרון — ' + titleOf(last)));
-      }
-      root.appendChild(el('a.btn.quiet', { href: '#/v/p' }, icon('cone'), 'תבניות אימון'));
-    }
-    root.appendChild(el('a.btn.quiet', { href: '#/v/h' }, icon('cup'), 'יומן האימונים'));
+    root.appendChild(el('div.plan-foot', null, el('a.btn.quiet.sm', { href: '#/v/h' }, icon('cup'), 'יומן האימונים'), copy, del));
   }
 
   function drillRow(d) {
@@ -1076,20 +1020,19 @@ function summary(s, layer, close) {
   note.value = s.note || '';
   note.onchange = () => { s.note = note.value.trim(); store(); };
   wrap.appendChild(note);
-  const keep = next => {
+  /* האימון השמור שממנו התחילו לא נוגעים בו: מה שהשתנה במגרש נשאר כאן */
+  const keep = () => {
     s.note = note.value.trim();
     s.status = 'done';
     putSession(s);
-    if (next) duplicate(s);
     syncNow();
     close();
-    toast(next ? 'נשמר ביומן — והאימון הבא מוכן לעריכה' : 'האימון נשמר ביומן');
+    const from = s.from && getSession(s.from);
+    toast(from && from.status === 'template' ? 'נשמר ביומן. "' + savedName(from) + '" נשאר באימונים השמורים' : 'האימון נשמר ביומן');
     /* סגירת השכבה שולחת "חזרה" אסינכרונית — ניווט מיד אחריה היה מתבטל */
-    afterLayers(() => { location.hash = next ? '#/v/a' : '#/v/h/' + s.id; });
+    afterLayers(() => { location.hash = '#/v/h/' + s.id; });
   };
-  wrap.appendChild(el('div.two', null,
-    el('button.btn', { type: 'button', text: 'שמירה ביומן', onclick: () => keep(false) }),
-    el('button.btn.gold', { type: 'button', text: 'שמירה ולשבוע הבא', onclick: () => keep(true) })));
+  wrap.appendChild(el('button.btn.gold.wide', { type: 'button', text: 'שמירה ביומן', onclick: keep }));
   layer.appendChild(wrap);
   layer.scrollTop = 0;
 }
@@ -1146,7 +1089,7 @@ export function mountJournal(root, id) {
     } else {
       root.appendChild(el('p.hint', { text: viewer ? 'כשהמאמן יסיים אימון, הסיכום שלו יופיע כאן.' : 'אחרי אימון, "שמירה ביומן" מביאה אותו לכאן.' }));
     }
-    if (!viewer) root.appendChild(el('a.btn.quiet', { href: '#/v/a' }, icon('watch'), 'האימון הקרוב'));
+    root.appendChild(el('a.btn.quiet', { href: '#/v/a' }, icon('watch'), 'האימונים השמורים'));
   }
 
   function detail(s) {
@@ -1166,10 +1109,8 @@ export function mountJournal(root, id) {
     note.value = s.note || '';
     note.onchange = () => { s.note = note.value.trim(); store(); };
     root.appendChild(note);
-    const build = el('button.btn.gold', { type: 'button', onclick: () => copyInto(s, () => afterLayers(() => { location.hash = '#/v/a'; })) },
-      icon('sync'), el('span', { text: 'שכפול לאימון הבא' }));
-    root.appendChild(build);
-    root.appendChild(el('button.btn', { type: 'button', onclick: () => saveAsTemplate(s) }, icon('cone'), el('span', { text: 'שמירה כתבנית' })));
+    /* מה שעבד באימון של היום נשמר כאימון לפעם הבאה */
+    root.appendChild(el('button.btn', { type: 'button', onclick: () => saveAsTemplate(s) }, icon('watch'), el('span', { text: 'שמירה כאימון שמור' })));
     const del = el('button.btn.quiet.sm', { type: 'button', text: 'מחיקה מהיומן' });
     del.onclick = () => {
       if (!del.classList.contains('sure')) { del.classList.add('sure'); del.textContent = 'למחוק את האימון מהיומן? לחיצה נוספת'; return; }

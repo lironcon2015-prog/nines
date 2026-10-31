@@ -590,8 +590,8 @@ export function isPortrait(url) {
 /* --- אימונים ---
    האימון יושב באותו מסמך כמו הסרטונים: כך הוא מגיע לספרייה המשותפת ולטלפון
    של הבן בלי מנגנון נוסף, וממוזג כמו סרטון — רשומה מול רשומה לפי updatedAt.
-   רשומה אחת לכל אימון, עם התרגילים בתוכה: status 'plan' — האימון הקרוב,
-   'done' — ביומן. תרגיל מחזיק את מזהה הסרטון, לא עותק שלו: השם, התמונה
+   רשומה אחת לכל אימון, עם התרגילים בתוכה: 'template' — אימון שמור,
+   'plan' — הרצה שהתחילה ממנו ועוד לא נשמרה, 'done' — ביומן. תרגיל מחזיק את מזהה הסרטון, לא עותק שלו: השם, התמונה
    והניגון באים מהספרייה, וההערה והמידה שלו שייכות לאימון הזה. */
 
 export function listSessions() {
@@ -602,9 +602,10 @@ export function getSession(id) {
   return listSessions().find(x => x.id === id) || null;
 }
 
-/** האימון הקרוב — האחרון שנבנה ועוד לא נשמר ביומן */
+/** ההרצה הפתוחה — אימון שהתחיל ועוד לא נשמר ביומן. 'plan' שלא התחיל הוא
+    "האימון הקרוב" של גרסה קודמת, ו-train.js הופך אותו לאימון שמור */
 export function upcoming() {
-  return listSessions().filter(x => x.status === 'plan').sort((a, b) => b.at - a.at)[0] || null;
+  return listSessions().filter(x => x.status === 'plan' && x.startedAt).sort((a, b) => b.at - a.at)[0] || null;
 }
 
 /** היומן, מהחדש לישן */
@@ -612,9 +613,9 @@ export function journal() {
   return listSessions().filter(x => x.status === 'done').sort((a, b) => (b.endedAt || b.at) - (a.endedAt || a.at));
 }
 
-/** תבניות — אימונים קבועים שלא נגמרים. הפעלה מעתיקה אותן לאימון הקרוב,
-    ולכן התבנית עצמה לא מקבלת תוצאות ולא נכנסת ליומן. גרסאות קודמות של
-    האפליקציה מסננות לפי 'plan' ו-'done' בלבד, ולכן אינן רואות אותן. */
+/** האימונים השמורים. "להתחיל" מעתיק אחד מהם להרצה חדשה, ולכן השמור עצמו
+    לא מקבל תוצאות ולא נכנס ליומן. גרסאות קודמות מסננות לפי 'plan' ו-'done'
+    בלבד, ולכן אינן רואות אותם. */
 export function templates() {
   return listSessions().filter(x => x.status === 'template')
     .sort((a, b) => (a.title || '').localeCompare(b.title || '', 'he') || a.at - b.at);
