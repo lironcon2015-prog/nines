@@ -20,7 +20,7 @@ import * as cloud from './cloud.js';
 import * as posters from './posters.js';
 import { state as sync, syncNow, onSync, autoOn } from './sync.js';
 import { $, el, icon, toast, whenText, agoText, sheet, openLayer, onEscape, afterLayers, readClipboard } from './ui.js';
-import { addVideosToPlan, planCard, pickTarget, pickDone } from './train.js';
+import { addVideosToSaved, savedCard, pickTarget } from './train.js';
 
 /* פלטפורמות שהדף שלהן מצהיר על קובץ וידאו או ניתן לשיבוץ */
 const FETCHABLE = new Set(['facebook', 'instagram', 'tiktok', 'youtube', 'x', 'vimeo']);
@@ -303,28 +303,26 @@ function paintAll() {
   if (picking) root.appendChild(pickbar());
 }
 
-/* --- האימון הקרוב: כרטיס בראש הספרייה, ובחירה לאימון ---
-   בעל הריפו: "כרטיס בראש מסך הסרטונים". הבן (צופה) רואה את היומן. */
+/* --- האימונים השמורים: כרטיס בראש הספרייה, ובחירה לאימון ---
+   בעל הריפו: "כרטיס בראש מסך הסרטונים". הבן (צופה) רואה את האימונים
+   ואת היומן, בלי בחירה ובלי הרצה. */
 function trainCard() {
-  if (readOnly()) {
-    return el('a.tcard', { href: '#/v/h' }, el('span.tic', null, icon('cup')),
-      el('span.ttx', null, el('b', { text: 'יומן האימונים' }), el('small', { text: 'הסיכומים, הציונים והשיאים' })),
-      el('span.go', null, icon('next')));
-  }
+  const viewer = readOnly();
   if (picking) {
     return el('div.tcard.picking', null, el('span.tic', null, icon('check')),
       el('span.ttx', null, el('b', { text: 'בחירה לאימון' }), el('small', { text: 'נגיעה בסרטון מסמנת אותו' })),
       el('button.btn.sm.quiet', { type: 'button', text: 'ביטול', onclick: () => { picking = null; pickTarget(null); paint(); } }));
   }
-  const p = planCard();
+  const p = savedCard();
+  const line = p.run && !viewer ? 'באמצע: ' + p.run
+    : p.count ? [p.count + (p.count === 1 ? ' אימון' : ' אימונים'), p.last ? 'האחרון: ' + p.last : ''].filter(Boolean).join(' · ')
+    : viewer ? 'המאמן עוד לא שמר אימונים' : 'בונים פעם אחת, ובוחרים מהם בכל אימון';
   const card = el('div.tcard');
   card.appendChild(el('a.tmain', { href: '#/v/a' }, el('span.tic', null, icon('watch')),
-    el('span.ttx', null, el('b', { text: p ? 'האימון הקרוב · ' + p.title : 'האימון הקרוב' }),
-      el('small.num', { text: p ? [p.date, p.count + (p.count === 1 ? ' תרגיל' : ' תרגילים'), p.total, p.live ? 'באמצע' : ''].filter(Boolean).join(' · ') : 'עוד לא נבנה — בוחרים תרגילים מהסרטונים' })),
+    el('span.ttx', null, el('b', { text: 'האימונים השמורים' }), el('small.num', { text: line })),
     el('span.go', null, icon('next'))));
   card.appendChild(el('div.tacts', null,
-    el('button.chip', { type: 'button', onclick: () => { pickTarget(null); picking = new Set(); paint(); } }, icon('check'), 'בחירה לאימון'),
-    el('a.chip', { href: '#/v/p' }, icon('cone'), 'תבניות'),
+    viewer ? null : el('button.chip', { type: 'button', onclick: () => { pickTarget(null); picking = new Set(); paint(); } }, icon('check'), 'בחירת סרטונים'),
     el('a.chip', { href: '#/v/h' }, icon('cup'), 'יומן')));
   return card;
 }
@@ -334,11 +332,11 @@ function pickbar() {
   return el('div.pickbar.glass', null,
     el('b.num', { text: n ? (n === 1 ? 'נבחר סרטון אחד' : n + ' נבחרו') : 'בחרו סרטונים' }),
     el('button.btn.gold.sm', { type: 'button', disabled: !n, onclick: () => {
-      const added = addVideosToPlan([...picking]);
-      picking = null;
-      const back = pickDone();
-      toast((added === 1 ? 'נוסף ' : added + ' נוספו ') + back.where);
-      location.hash = back.href;
+      addVideosToSaved([...picking], (href, msg) => {
+        picking = null;
+        toast(msg);
+        location.hash = href;
+      });
     } }, 'הוספה לאימון'));
 }
 
@@ -966,8 +964,9 @@ function buildPlayer(id, onClose) {
     if (owner) {
       /* לאימון הקרוב, בלי לצאת מהנגן */
       rail.appendChild(railBtn('plus', 'לאימון', () => {
-        addVideosToPlan([v.id], true);
-        toast('נוסף לאימון הקרוב', { label: 'לאימון', run: () => { shutAll(); afterLayers(() => { location.hash = '#/v/a'; }); } });
+        /* "לאיזה אימון?" הוא גיליון, והנגן יושב מעליו — סוגרים קודם, כמו ב"עריכה" */
+        shutAll();
+        afterLayers(() => addVideosToSaved([v.id], (href, msg) => toast(msg, { label: 'לאימון', run: () => { location.hash = href; } })));
       }));
       rail.appendChild(railBtn('pen', 'עריכה', () => { shutAll(); openEditor(null, getVideo(v.id)); }));
     }
