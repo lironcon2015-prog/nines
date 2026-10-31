@@ -977,7 +977,7 @@ h1.plan-title { border: 0; }
 .hint.pad { padding: 1rem 0; }
 .plan-add { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin: .8rem 0; }
 .plan-go { margin-top: .2rem; }
-.plan-foot { display: flex; justify-content: space-between; align-items: center; margin-top: .6rem; }
+.plan-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .2rem .4rem; margin-top: .6rem; }
 .plan-foot .btn { width: auto; }
 
 /* עריכת תרגיל */
@@ -1094,6 +1094,11 @@ p.rcomment { margin: 0; font-size: .9rem; color: var(--muted); }
 /* היומן */
 .mr.recrow b { font-size: 1rem; }
 .mr.jrow { text-decoration: none; color: var(--text); }
+.mr.tplrow { gap: .5rem; }
+.tplmain { flex: 1; min-width: 0; display: flex; align-items: center; min-height: 54px; text-decoration: none; color: var(--text); }
+.tplmain .name { display: grid; white-space: normal; }
+.tplmain .name small { font-size: .76rem; color: var(--faint); font-weight: 600; }
+.mr.tplrow .btn { width: auto; flex: none; }
 .jdate { width: 3.2rem; flex: none; font-weight: 700; color: var(--gold-text); }
 .mr.jrow .name { display: grid; white-space: normal; }
 .mr.jrow .name small { font-size: .76rem; color: var(--faint); font-weight: 600; }
