@@ -6,7 +6,7 @@ import { renderLibrary } from './library.js';
 import { mountQuiz, buildQuestions } from './quiz.js';
 import { mountLibrary } from './videolib.js';
 import { mountCategories } from './vcats.js';
-import { mountPlan, mountJournal, mountSaved } from './train.js';
+import { mountPlan, mountJournal, mountSaved, resumeLive } from './train.js';
 import { mountSync } from './sync.js';
 import { drawPack } from './packui.js';
 import { migrate } from './videos.js';
@@ -321,6 +321,8 @@ async function boot() {
   document.documentElement.classList.remove('loading');
   $('state').style.display = 'none';
   show(parseHash());
+  /* האפליקציה נסגרה באמצע אימון (האייפון סוגר אותה ברקע): חוזרים אליו */
+  resumeLive();
 
   /* מקשי חצים — נרשם פעם אחת ומופנה למסך הפעיל */
   document.addEventListener('keydown', e => {
@@ -358,7 +360,9 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!hadController || reloading) return;
     reloading = true;
-    location.reload();
+    /* לא באמצע אימון: הרענון מעלים את מסך האימון מתחת לידיים. מחכים שייסגר */
+    const reload = () => { if (document.querySelector('.live')) setTimeout(reload, 2000); else location.reload(); };
+    reload();
   });
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js')
