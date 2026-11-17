@@ -25,9 +25,11 @@ import { openVideo, videoThumb, posterUrlsReady, pickForTraining } from './video
 /* --- מידות --- */
 
 const KINDS = [['time', 'זמן'], ['interval', 'עבודה/מנוחה'], ['reps', 'חזרות'], ['challenge', 'אתגר']];
-const START = { kind: 'time', minutes: 5, work: 30, rest: 15, rounds: 6, sets: 3, reps: 8, unit: '', limit: 0 };
+/* setRest — מנוחה בין סטים בחזרות. שדה נפרד ולא rest: rest יושב בכל תרגיל
+   כבר עם 15 (מ-START), ותרגילי חזרות קיימים היו מקבלים מנוחה שאף אחד לא בחר */
+const START = { kind: 'time', minutes: 5, work: 30, rest: 15, rounds: 6, sets: 3, reps: 8, setRest: 0, unit: '', limit: 0 };
 /* מה עובר לאימון הבא כשמשכפלים — בלי התוצאות */
-const PLAN_KEYS = ['video', 'title', 'kind', 'minutes', 'work', 'rest', 'rounds', 'sets', 'reps', 'unit', 'limit', 'note'];
+const PLAN_KEYS = ['video', 'title', 'kind', 'minutes', 'work', 'rest', 'rounds', 'sets', 'reps', 'setRest', 'unit', 'limit', 'note'];
 
 function clock(sec) {
   const n = Math.max(0, Math.round(sec || 0));
@@ -115,6 +117,17 @@ function drillFrom(v) {
 
 const savedName = s => s.title || 'אימון בלי שם';
 
+/** "לחיצה נוספת" לאישור. נגיעה כפולה מהירה אינה אישור — היא נגיעה אחת
+    שנרשמה פעמיים, ומחקה בלי שאיש ראה את השאלה */
+function confirmTap(btn, ask, fn) {
+  let armed = 0;
+  btn.onclick = () => {
+    const t = Date.now();
+    if (!armed) { armed = t; btn.classList.add('sure'); btn.textContent = ask; return; }
+    if (t - armed > 400) fn();
+  };
+}
+
 /** הפעם האחרונה שהאימון נעשה. לפני האימונים השמורים לא היה `from`, ולכן
     אימון ישן ביומן מזוהה לפי השם */
 function lastDone(t) {
@@ -200,25 +213,46 @@ export function savedCard() {
   };
 }
 
-/** להתחיל אימון שמור: עותק נקי ממנו, וההרצה עליו. יש הרצה פתוחה — שואלים. */
-function startSaved(t, after) {
-  if (readOnly() || !t.drills.length) return;
+/** להתחיל אימון שמור: עותק נקי ממנו, וההרצה עליו. יש הרצה פתוחה — שואלים.
+    העותק נוצר רק כשבאמת פותחים: עותק שנוצר ולא נפתח (startedAt ריק) הופך
+    ב-migrate לאימון שמור נוסף — כפילות שצצה ברשימה בלי שאיש יצר אותה. */
+function startSaved(t) {
+  if (readOnly() || !t.drills.length || liveId) return;
   const go = () => {
+    if (liveId) return;
     const s = newSession({ from: t.id, title: t.title || '', goal: t.goal || '', date: today(), drills: t.drills.map(d => planOnly(d)) });
-    startLive(s, after);
+    startLive(s);
   };
   const run = upcoming();
   if (!run) { go(); return; }
   sheet('יש אימון באמצע', (body, close) => {
+    /* הגיליון נסגר באנימציה ועדיין מקבל לחיצות: לחיצה כפולה פתחה שתי
+       שכבות אימון, או יצרה שתי הרצות */
+    let used = false;
+    const once = fn => () => { if (used) return; used = true; close(); fn(); };
     body.append(
       el('p.hint', { text: '"' + titleOf(run) + '" התחיל ועוד לא נשמר ביומן.' }),
-      el('button.btn.gold.wide', { type: 'button', text: run.endedAt ? 'לסיכום שלו' : 'להמשיך אותו', onclick: () => { close(); afterLayers(() => resume(run, after)); } }),
-      el('button.btn.wide', { type: 'button', text: 'לבטל אותו ולהתחיל את "' + savedName(t) + '"', onclick: () => { close(); removeSession(run.id); syncNow(); afterLayers(go); } }));
+      el('button.btn.gold.wide', { type: 'button', text: run.endedAt ? 'לסיכום שלו' : 'להמשיך אותו', onclick: once(() => afterLayers(() => startLive(run))) }),
+      el('button.btn.wide', { type: 'button', text: 'לבטל אותו ולהתחיל את "' + savedName(t) + '"', onclick: once(() => { removeSession(run.id); syncNow(); afterLayers(go); }) }));
   });
 }
 
-function resume(run, after) {
-  if (run.endedAt) openSummary(run, after); else startLive(run, after);
+/* הרצה שלא נשמרה ביומן: יצאו באמצע, או מהסיכום בלי לשמור. מופיעה ברשימת
+   האימונים השמורים, ובעמוד של האימון השמור שממנו היא התחילה */
+function runCard(run, repaint) {
+  const drop = el('button.btn.quiet.sm', { type: 'button', text: 'לבטל' });
+  confirmTap(drop, 'לבטל את האימון הזה? לחיצה נוספת', () => {
+    removeSession(run.id);
+    syncNow();
+    toast('האימון בוטל');
+    repaint();
+  });
+  const done = run.drills.filter(d => d.done).length;
+  return el('div.tcard.runcard', null,
+    el('span.ttx', null, el('b', { text: 'באמצע · ' + titleOf(run) }), el('small.num', { text: done + ' מתוך ' + run.drills.length + ' תרגילים' + (run.activeSecs ? ' · ' + clock(run.activeSecs) : '') })),
+    el('div.tacts', null,
+      el('button.btn.gold.sm', { type: 'button', onclick: () => startLive(run) }, icon(run.endedAt ? 'check' : 'play'), run.endedAt ? 'לסיכום ושמירה ביומן' : 'להמשיך'),
+      drop));
 }
 
 /** שמירה של אימון מהיומן כאימון שמור. אותו שם — מעדכנים את הקיים, כי
@@ -236,14 +270,19 @@ function saveAsTemplate(from) {
       go.textContent = t ? 'לעדכן את האימון השמור' : 'לשמור';
     };
     name.oninput = check;
+    let used = false;
     go.onclick = () => {
+      if (used) return;
+      used = true;
       const drills = from.drills.map(d => planOnly(d));
       let t = same();
+      /* נבדק לפני השמירה: אחריה גם אימון חדש כבר "קיים" בשם הזה */
+      const existed = !!t;
       if (t) { t.drills = drills; t.goal = from.goal || t.goal || ''; putSession(t); }
       else t = newSession({ status: 'template', title: name.value.trim(), goal: from.goal || '', drills });
       syncNow();
       close();
-      toast(same() && t.at !== Date.now() ? 'האימון השמור עודכן' : 'נשמר באימונים השמורים', { label: 'לאימון', run: () => { location.hash = '#/v/a/' + t.id; } });
+      toast(existed ? 'האימון השמור עודכן' : 'נשמר באימונים השמורים', { label: 'לאימון', run: () => { location.hash = '#/v/a/' + t.id; } });
     };
     check();
     body.append(name, note, go);
@@ -270,12 +309,12 @@ export function mountSaved(root) {
     const all = templates();
     root.appendChild(pageHead('watch', 'האימונים השמורים', all.length ? all.length + (all.length === 1 ? ' אימון' : ' אימונים') : 'בונים פעם אחת, ובוחרים מהם בכל אימון'));
     const run = upcoming();
-    if (run && !viewer) root.appendChild(runCard(run));
+    if (run && !viewer) root.appendChild(runCard(run, paint));
     if (all.length) {
       const box = el('div.card.rows');
       all.forEach(t => box.appendChild(el('div.mr.tplrow', null,
         el('a.tplmain', { href: '#/v/a/' + t.id }, el('span.name', null, el('b', { text: savedName(t) }), el('small.num', { text: savedLine(t) }))),
-        viewer || !t.drills.length ? null : el('button.btn.sm', { type: 'button', onclick: () => startSaved(t, paint) }, icon('play'), 'להתחיל'))));
+        viewer || !t.drills.length ? null : el('button.btn.sm', { type: 'button', onclick: () => startSaved(t) }, icon('play'), 'להתחיל'))));
       root.appendChild(box);
     } else {
       root.appendChild(el('p.hint', { text: viewer ? 'המאמן עוד לא שמר אימונים.' : 'אימון שמור הוא רשימת תרגילים שחוזרים עליה — "טכניקה", "כושר", "בעיטות לשער". בכל אימון בוחרים אחד מהם ומתחילים. הסיכום נכנס ליומן, והאימון השמור נשאר כמו שהוא.' }));
@@ -290,27 +329,10 @@ export function mountSaved(root) {
     root.appendChild(el('a.btn.quiet', { href: '#/v/h' }, icon('cup'), 'יומן האימונים'));
   }
 
-  /* הרצה שלא נשמרה ביומן: יצאו באמצע, או מהסיכום בלי לשמור */
-  function runCard(run) {
-    const drop = el('button.btn.quiet.sm', { type: 'button', text: 'לבטל' });
-    drop.onclick = () => {
-      if (!drop.classList.contains('sure')) { drop.classList.add('sure'); drop.textContent = 'לבטל את האימון הזה? לחיצה נוספת'; return; }
-      removeSession(run.id);
-      syncNow();
-      toast('האימון בוטל');
-      paint();
-    };
-    const done = run.drills.filter(d => d.done).length;
-    return el('div.tcard.runcard', null,
-      el('span.ttx', null, el('b', { text: 'באמצע · ' + titleOf(run) }), el('small.num', { text: done + ' מתוך ' + run.drills.length + ' תרגילים' + (run.activeSecs ? ' · ' + clock(run.activeSecs) : '') })),
-      el('div.tacts', null,
-        el('button.btn.gold.sm', { type: 'button', onclick: () => resume(run, paint) }, icon(run.endedAt ? 'check' : 'play'), run.endedAt ? 'לסיכום ושמירה ביומן' : 'להמשיך'),
-        drop));
-  }
-
   paint();
   const off = onSync(ch => { if (ch && !root.hidden && !document.querySelector('.sheet.on, .live')) paint(); });
-  return { destroy() { off(); root.textContent = ''; } };
+  screenPaint = paint;
+  return { destroy() { off(); if (screenPaint === paint) screenPaint = null; root.textContent = ''; } };
 }
 
 /** #/v/a/<id> — אימון שמור: עורכים אותו, ומתחילים ממנו */
@@ -319,7 +341,7 @@ export function mountPlan(root, id) {
   migrate();
   const viewer = readOnly();
   let s = null;
-  let sureDelete = false;
+  let sureDelete = 0;
   const save = repaint => {
     putSession(s);
     syncNow();
@@ -337,6 +359,10 @@ export function mountPlan(root, id) {
       return;
     }
     document.title = savedName(s) + ' — תשיעיות';
+
+    /* יצאו מהאימון — חוזרים לכאן, ו"להמשיך" צריך להיות כאן ולא רק ברשימה */
+    const run = viewer ? null : upcoming();
+    if (run && run.from === s.id) root.appendChild(runCard(run, paint));
 
     const head = el('div.plan-head');
     if (viewer) {
@@ -368,7 +394,7 @@ export function mountPlan(root, id) {
     root.appendChild(el('div.plan-add', null,
       el('button.btn', { type: 'button', onclick: () => { pickTarget(s.id); pickForTraining(); } }, icon('plus'), 'מהסרטונים'),
       el('button.btn', { type: 'button', onclick: () => editDrill(s, drillFrom(null), true, save) }, icon('plus'), 'תרגיל בלי סרטון')));
-    root.appendChild(el('button.btn.gold.wide.plan-go', { type: 'button', disabled: !n, onclick: () => startSaved(s, paint) },
+    root.appendChild(el('button.btn.gold.wide.plan-go', { type: 'button', disabled: !n, onclick: () => startSaved(s) },
       icon('play'), 'להתחיל אימון'));
     root.appendChild(el('p.hint', { text: 'שינוי באמצע האימון נשאר באימון של אותו יום. כאן משנים את האימון השמור עצמו.' }));
 
@@ -380,8 +406,10 @@ export function mountPlan(root, id) {
     } });
     const del = el('button.btn.quiet.sm', { type: 'button', text: sureDelete ? 'למחוק את האימון? לחיצה נוספת מוחקת' : 'מחיקה' });
     del.onclick = () => {
-      if (!sureDelete) { sureDelete = true; del.textContent = 'למחוק את האימון? לחיצה נוספת מוחקת'; return; }
-      sureDelete = false;
+      if (!sureDelete) { sureDelete = Date.now(); del.textContent = 'למחוק את האימון? לחיצה נוספת מוחקת'; return; }
+      /* נגיעה כפולה מהירה אינה אישור */
+      if (Date.now() - sureDelete < 400) return;
+      sureDelete = 0;
       removeSession(s.id);
       syncNow();
       toast('האימון נמחק — היומן לא השתנה');
@@ -504,10 +532,14 @@ export function mountPlan(root, id) {
     };
   }
 
-  posterUrlsReady().then(() => { if (root.isConnected && !root.hidden) paint(); });
+  /* gone: אותו root משמש גם את הרשימה ואת היומן, ותמונות שנטענו אחרי שעברנו
+     מסך היו מציירות את האימון השמור מעל המסך החדש */
+  let gone = false;
+  posterUrlsReady().then(() => { if (!gone && root.isConnected && !root.hidden) paint(); });
   paint();
   const off = onSync(ch => { if (ch && !root.hidden && !document.querySelector('.sheet.on, .live')) paint(); });
-  return { destroy() { off(); root.textContent = ''; } };
+  screenPaint = paint;
+  return { destroy() { gone = true; off(); if (screenPaint === paint) screenPaint = null; root.textContent = ''; } };
 }
 
 /* --- עריכת תרגיל ---
@@ -532,7 +564,9 @@ const secs = n => n + ' שנ׳';
 
 function editDrill(s, d, isNew, done) {
   const v = d.video ? getVideo(d.video) : null;
-  const w = Object.assign({}, d);
+  /* START מתחת: לתרגיל מגרסה קודמת חסרים שדות (setRest), והצעד "+" על
+     undefined היה כותב NaN */
+  const w = Object.assign({}, START, d);
   sheet(isNew ? 'תרגיל חדש' : 'עריכת תרגיל', (body, close) => {
     const form = el('div.stack.dform');
     const name = el('input.inp', { type: 'text', id: 'd-title', placeholder: v ? v.title : 'למשל חימום, מים, משחק 1 על 1' });
@@ -547,7 +581,8 @@ function editDrill(s, d, isNew, done) {
     const total = el('p.dtotal');
     const paintTotal = () => {
       const t = plannedSecs(w);
-      total.textContent = w.kind === 'reps' ? 'בלי טיימר — מסמנים כל סט' : t ? 'זמן: ' + clock(t) : 'בלי טיימר — סופרים עד שמסיימים';
+      total.textContent = w.kind === 'reps' ? (w.setRest ? 'מסמנים כל סט, ואז מנוחה עם צפצוף לסט הבא' : 'בלי טיימר — מסמנים כל סט')
+        : t ? 'זמן: ' + clock(t) : 'בלי טיימר — סופרים עד שמסיימים';
     };
     const paintKind = () => {
       kinds.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.k === w.kind)));
@@ -558,7 +593,8 @@ function editDrill(s, d, isNew, done) {
         st('עבודה', 'work', { min: 5, max: 600, step: 5, fmt: secs }),
         st('מנוחה', 'rest', { min: 0, max: 600, step: 5, fmt: secs }),
         st('סבבים', 'rounds', { min: 1, max: 40, step: 1 }));
-      if (w.kind === 'reps') fields.append(st('סטים', 'sets', { min: 1, max: 10, step: 1 }), st('חזרות בסט', 'reps', { min: 1, max: 200, step: 1 }));
+      if (w.kind === 'reps') fields.append(st('סטים', 'sets', { min: 1, max: 10, step: 1 }), st('חזרות בסט', 'reps', { min: 1, max: 200, step: 1 }),
+        st('מנוחה בין סטים', 'setRest', { min: 0, max: 600, step: 15, fmt: x => x ? secs(x) : 'בלי' }));
       if (w.kind === 'challenge') {
         const unit = el('input.inp', { type: 'text', id: 'd-unit', placeholder: 'מה סופרים — למשל קפיצות, מסירות' });
         unit.value = w.unit || '';
@@ -574,7 +610,12 @@ function editDrill(s, d, isNew, done) {
     const note = el('textarea.inp', { id: 'd-note', rows: 3, placeholder: 'הערה לאימון הזה — מופיעה גדול במגרש. למשל: רק רגל שמאל' });
     note.value = w.note || '';
     form.appendChild(el('label.dlabel', null, el('span', { text: 'הערה' }), note));
+    /* הגיליון נסגר באנימציה ועדיין מקבל לחיצות — "שמירה" כפולה הוסיפה את
+       התרגיל החדש פעמיים */
+    let used = false;
     form.appendChild(el('button.btn.gold.wide', { type: 'button', text: 'שמירה', onclick: () => {
+      if (used) return;
+      used = true;
       w.title = name.value.trim() || (v ? v.title : 'תרגיל');
       w.note = note.value.trim();
       Object.assign(d, w);
@@ -584,12 +625,13 @@ function editDrill(s, d, isNew, done) {
     } }));
     if (!isNew) {
       const del = el('button.btn.quiet', { type: 'button', text: 'הוצאה מהאימון' });
-      del.onclick = () => {
-        if (!del.classList.contains('sure')) { del.classList.add('sure'); del.textContent = 'להוציא את "' + nameOf(d, 'התרגיל') + '"? לחיצה נוספת'; return; }
+      confirmTap(del, 'להוציא את "' + nameOf(d, 'התרגיל') + '"? לחיצה נוספת', () => {
+        if (used) return;
+        used = true;
         s.drills = s.drills.filter(x => x.id !== d.id);
         close();
         done(true);
-      };
+      });
       form.appendChild(del);
     }
     body.appendChild(form);
@@ -609,7 +651,8 @@ function beep(freq, ms, when) {
       if (!AC) return;
       audio = new AC();
     }
-    if (audio.state === 'suspended') audio.resume();
+    /* באייפון גם 'interrupted' (שיחה, מעבר לאפליקציה אחרת), ולא רק 'suspended' */
+    if (audio.state !== 'running') { const p = audio.resume(); if (p && p.catch) p.catch(() => {}); }
     const t0 = audio.currentTime + (when || 0);
     const o = audio.createOscillator();
     const g = audio.createGain();
@@ -625,8 +668,8 @@ function beep(freq, ms, when) {
   } catch (e) { /* בלי קול — הטיימר עדיין על המסך */ }
 }
 function unlockAudio() {
-  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* דפדפן ישן */ }
-  beep(440, 1);
+  try { if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; } catch (e) { /* דפדפן ישן */ }
+  if (!audio || audio.state !== 'running') beep(440, 1);
 }
 const sound = {
   tick: () => beep(880, 110),
@@ -646,7 +689,26 @@ function letSleep() {
   wake = null;
 }
 
-/* --- במגרש --- */
+/* --- במגרש ---
+   שכבה אחת במסך מלא, בשני מצבים: האימון והסיכום. "סיום" עובר לסיכום באותה
+   שכבה ו"חזרה לאימון" חוזר ממנו. קודם הסיכום החליף את תוכן השכבה ולא הייתה
+   ממנו דרך חזרה וגם לא יציאה — באייפון אין כפתור "חזרה", ונשארנו תקועים עד
+   "שמירה ביומן".
+
+   מה שנשבר כאן בפועל, ולמה הקוד נראה כמו שהוא:
+   - תרגיל שסומן "סיימנו" וחזרו אליו: ▶ הפך ל-❚❚ והשעון לא זז, כי advance
+     סירב לקדם תרגיל שבוצע. "בוצע" הוא סימון, לא נעילה — תרגיל שבוצע אפשר
+     להריץ שוב.
+   - לחיצה כפולה נחתה על הכפתור החדש שצויר באותו מקום: "סיימנו" כפול דילג על
+     תרגיל שלם, "סט הושלם" כפול רשם שני סטים. calm.
+   - שתי שכבות זו על זו (לחיצה כפולה על "להמשיך"), עם שני שעונים שספרו את
+     אותו אימון פעמיים. liveId.
+   - "יציאה" הייתה הדרך היחידה לעצור, והיא לא סיימה כלום: האימון נשאר
+     "באמצע". עכשיו "עצירה" שואלת: לסיים ולשמור, או לצאת ולהמשיך אחר כך. */
+
+const GAP = 3 * 3600 * 1000;   // יותר מזה — כבר לא אותו אימון
+let liveId = null;             // שכבה אחת בלבד
+let screenPaint = null;        // המסך שמתחת (רשימה / אימון שמור), מתעדכן כשהשכבה נסגרת
 
 /** איפה התרגיל עומד אחרי secs שניות פעילות */
 function phaseAt(d, secs) {
@@ -664,87 +726,162 @@ function phaseAt(d, secs) {
   return { left: total - secs };
 }
 
-function startLive(s, after) {
-  if (readOnly() || !s.drills.length) return;
-  // היומן מתעד מתי התאמנו, לא לאיזה יום תכננו — ומשם גם השם "אימון <יום>"
-  if (!s.startedAt) { s.startedAt = Date.now(); s.date = today(); }
-  s.endedAt = 0;
-  if (typeof s.cur !== 'number' || s.cur >= s.drills.length) s.cur = Math.max(0, s.drills.findIndex(d => !d.done));
-  putSession(s);
+/** התרגיל הבא שעוד לא נעשה אחרי i; ‎-1 כשאין */
+function nextOpen(s, i) {
+  for (let j = i + 1; j < s.drills.length; j++) if (!s.drills[j].done) return j;
+  return -1;
+}
 
-  const layer = el('div.live', { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'אימון' });
+/** כמה מנוחה נשארה בין סטים, בשניות. לפי שעון הקיר: מנוחה היא מנוחה, גם
+    כשמסתכלים בסרטון וגם כשהטלפון נעול */
+const restLeft = d => d.restTo ? Math.max(0, (d.restTo - Date.now()) / 1000) : 0;
+
+/** האפליקציה נסגרה באמצע אימון — האייפון סוגר אותה ברקע, וגם עדכון גרסה
+    מרענן: פותחים אותו שוב, במקום שבו היה. app.js קורא לזה בעלייה. */
+export function resumeLive() {
+  if (readOnly() || liveId) return;
+  const run = upcoming();
+  if (!run || run.endedAt || !run.liveAt || Date.now() - run.liveAt > GAP) return;
+  startLive(run);
+}
+
+/** פותח את שכבת האימון: הרצה שהתחילה, או הסיכום של הרצה שהסתיימה (endedAt) */
+function startLive(s) {
+  if (readOnly() || !s || !s.drills.length || liveId) return;
+  const t0 = Date.now();
+  // היומן מתעד מתי התאמנו, לא לאיזה יום תכננו — ומשם גם השם "אימון <יום>"
+  if (!s.startedAt) { s.startedAt = t0; s.date = today(); }
+  if (typeof s.cur !== 'number' || s.cur < 0 || s.cur >= s.drills.length) s.cur = Math.max(0, s.drills.findIndex(d => !d.done));
+  let mode = s.endedAt ? 'sum' : 'live';
+
+  /* שעון התרגיל: running, ו-last — עד מתי d.secs כבר נספר */
   let running = false;
   let watching = false;
-  let last = Date.now();
+  let last = t0;
+  /* זמן האימון נספר רק כשהמסך הזה פתוח: activeSecs, ועוד מה שעבר מאז
+     openedAt. לפי שעון הקיר — מי שנכנס לבדוק ויצא ראה אחרי לילה "8 שעות" */
+  let openedAt = t0;
   let savedAt = 0;
+  let refresh = null;
+  let totalEl = null;
+  let calmUntil = 0;
+  let offMenu = null;
+  let closed = false;
   let timer = 0;
   let offKey = null;
-  let finished = false;
-  let refresh = null;
 
-  /* זמן האימון נספר רק כשהמסך הזה פתוח. לפי שעון הקיר — מי שנכנס לבדוק ויצא
-     ראה אחרי לילה "8 שעות" */
-  let openedAt = Date.now();
-  /* האייפון סגר את האפליקציה כשהיא ברקע, והמסך הזה היה פתוח: הזמן מאז הדופק
-     האחרון הוא זמן אימון. יותר משלוש שעות — כבר לא אותו אימון */
-  if (s.liveAt) {
-    const gap = (Date.now() - s.liveAt) / 1000;
-    if (gap > 0 && gap < 3 * 3600) s.activeSecs = (s.activeSecs || 0) + gap;
-    s.liveAt = 0;
+  /* האפליקציה נסגרה כשהמסך הזה היה פתוח: הזמן מאז הדופק האחרון הוא זמן
+     אימון, וגם זמן תרגיל אם השעון שלו רץ — כמו בטלפון נעול, שבו התרגיל
+     ממשיך לרוץ */
+  if (mode === 'live' && s.liveAt) {
+    const gap = t0 - s.liveAt;
+    if (gap < GAP) {
+      if (gap > 0) s.activeSecs = (s.activeSecs || 0) + gap / 1000;
+      if (s.tickAt && s.tickAt <= t0) { running = true; last = s.tickAt; }
+    }
   }
-  const elapsed = () => (s.activeSecs || 0) + (Date.now() - openedAt) / 1000;
-  const bank = () => { if (finished) return; s.activeSecs = elapsed(); openedAt = Date.now(); };
-  const store = () => { bank(); if (!finished) s.liveAt = Date.now(); putSession(s); savedAt = Date.now(); };
+
+  /* פער של יותר משלוש שעות אינו נספר בשום מסלול — גם לא כשהשמירה הבאה
+     מגיעה ממקום לא צפוי (רענון, חזרה מהרקע). הדופק שומר כל חמש שניות,
+     ולכן פער כזה הוא תמיד דף שהיה מושהה, לא אימון */
+  const span = () => { const ms = Date.now() - openedAt; return mode === 'live' && ms > 0 && ms < GAP ? ms / 1000 : 0; };
+  const elapsed = () => (s.activeSecs || 0) + span();
+  const bank = () => { if (mode !== 'live') return; s.activeSecs = elapsed(); openedAt = Date.now(); };
+  /* liveAt — "המסך הזה פתוח", בשביל החזרה אחרי שהאפליקציה נסגרה. tickAt —
+     "שעון התרגיל רץ, ונספר עד כאן". בזמן צפייה בסרטון השעון אינו רץ */
+  const store = () => {
+    bank();
+    s.liveAt = mode === 'live' ? Date.now() : 0;
+    s.tickAt = mode === 'live' && running && !watching ? last : 0;
+    putSession(s);
+    savedAt = Date.now();
+  };
+
+  const layer = el('div.live', { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'אימון' });
+  /* view מצויר מחדש; תפריט העצירה יושב לידו, כדי שציור (תרגיל שנגמר) לא ימחק אותו */
+  const view = el('div.lview');
+  layer.appendChild(view);
   const close = openLayer(() => {
+    closed = true;
     clearInterval(timer);
     if (offKey) offKey();
+    if (offMenu) offMenu();
     document.removeEventListener('visibilitychange', onVis);
+    bank();
     running = false;
-    store();
-    /* יציאה ביד — מכאן הזמן לא נספר */
+    /* יציאה ביד — מכאן הזמן לא נספר, ולא חוזרים לכאן לבד בפתיחה הבאה */
     s.liveAt = 0;
+    s.tickAt = 0;
     putSession(s);
     syncNow();
     letSleep();
     layer.remove();
-    if (after) after();
+    liveId = null;
+    if (screenPaint) screenPaint();
   });
-  /* חזרה מטלפון נעול או מאפליקציה אחרת: last לא מתאפס — התרגיל המשיך לרוץ
-     בזמן הזה, והטיק הבא משלים אותו (ואם נגמר — עובר הלאה) */
-  const onVis = () => { if (document.visibilityState === 'visible') keepAwake(); };
-  document.addEventListener('visibilitychange', onVis);
   offKey = onEscape(() => close());
-  keepAwake();
 
-  const totalEl = el('b.ltotal.num');
-  const countEl = el('span.lcount.num');
-  const prog = el('div.lprog');
-  const main = el('div.lmain');
-  const foot = el('div.lfoot');
-  const top = el('div.ltop', null,
-    el('button.lx', { type: 'button', 'aria-label': 'יציאה — אפשר להמשיך אחר כך', onclick: () => close() }, icon('x'), 'יציאה'),
-    el('span.ltlabel', null, 'זמן האימון ', totalEl), countEl);
-  layer.append(top, prog, main, foot);
-  document.body.appendChild(layer);
+  /* חזרה מטלפון נעול או מאפליקציה אחרת: last לא מתאפס — התרגיל המשיך לרוץ
+     בזמן הזה, והטיק הבא משלים אותו. היציאה לרקע שומרת מיד: אחריה האייפון
+     עלול לסגור את האפליקציה בלי הזדמנות נוספת */
+  const onVis = () => {
+    if (closed) return;
+    if (document.visibilityState === 'hidden') { store(); return; }
+    if (mode === 'live') keepAwake();
+    tick();
+  };
+  document.addEventListener('visibilitychange', onVis);
+  /* הקול נפתח בנגיעה — כל נגיעה במסך, ולא רק ב-▶ (חזרות ואתגר בלי שעון) */
+  layer.addEventListener('click', unlockAudio, true);
+
+  /* פעולה שמציירת את המסך מחדש: לחיצה כפולה נחתה על הכפתור החדש שצויר
+     באותו מקום. +1 באתגר אינו עובר כאן — שם כל נגיעה נספרת */
+  const calm = fn => () => {
+    const t = Date.now();
+    if (t < calmUntil) return;
+    calmUntil = t + 600;
+    fn();
+  };
 
   const cur = () => s.drills[s.cur];
-  const paintTotal = () => { totalEl.textContent = clock(elapsed()); };
+  const paintTotal = () => { if (totalEl) totalEl.textContent = clock(elapsed()); };
 
   function paint() {
-    if (finished) return;
-    paintTotal();
+    if (closed) return;
+    refresh = null;
+    totalEl = null;
+    view.textContent = '';
+    if (mode === 'sum') paintSum(); else paintLive();
+  }
+
+  function paintLive() {
     const d = cur();
-    countEl.textContent = (s.cur + 1) + ' / ' + s.drills.length;
-    prog.textContent = '';
+    const n = s.drills.length;
+    totalEl = el('b.ltotal.num');
+    view.appendChild(el('div.ltop', null,
+      el('button.lx', { type: 'button', 'aria-label': 'עצירת האימון', onclick: stopMenu }, icon('stop'), 'עצירה'),
+      el('span.ltlabel', null, 'זמן האימון ', totalEl),
+      /* "מתוך" ולא "/": בעברית "1 / 4" מוצג "4 / 1" */
+      el('span.lcount.num', { text: (s.cur + 1) + ' מתוך ' + n })));
+    paintTotal();
+
+    /* הפס: כל מקטע הוא כפתור למעבר. העכשווי מסומן גם כשהוא כבר בוצע —
+       קודם הוא נצבע רק כ"בוצע", ולא היה אפשר לדעת איפה אתה */
+    const prog = el('div.lprog', { role: 'group', 'aria-label': 'התרגילים' });
     s.drills.forEach((x, i) => {
-      const seg = el('button', { type: 'button', 'aria-label': 'תרגיל ' + (i + 1) + ': ' + nameOf(x, ''), onclick: () => go(i) });
-      seg.className = x.done ? 'done' : (i === s.cur ? 'now' : '');
+      const seg = el('button', { type: 'button', 'aria-label': 'תרגיל ' + (i + 1) + ': ' + nameOf(x) + (x.done ? ' — בוצע' : ''), onclick: calm(() => go(i)) });
+      seg.className = [x.done ? 'done' : '', i === s.cur ? 'now' : ''].join(' ').trim();
+      if (i === s.cur) seg.setAttribute('aria-current', 'step');
       prog.appendChild(seg);
     });
-    main.textContent = '';
-    refresh = null;
+    view.appendChild(prog);
+
+    const main = el('div.lmain');
+    main.appendChild(el('div.lhead', null,
+      el('button.lnav', { type: 'button', 'aria-label': 'הקודם ברשימה', disabled: s.cur === 0, onclick: calm(() => go(s.cur - 1)) }, icon('prev')),
+      el('h2.ltitle', null, d.done ? icon('check', 'ok') : null, nameOf(d)),
+      el('button.lnav', { type: 'button', 'aria-label': 'הבא ברשימה', disabled: s.cur === n - 1, onclick: calm(() => go(s.cur + 1)) }, icon('next'))));
     const v = d.video ? getVideo(d.video) : null;
-    main.appendChild(el('h2.ltitle', { text: nameOf(d) }));
     if (v) {
       main.appendChild(el('button.card.lvid', { type: 'button', onclick: () => watch(v) }, videoThumb(v),
         el('span', null, el('b', null, icon('play'), ' צפייה בסרטון'), el('small', { text: 'טיימר התרגיל עוצר בזמן הצפייה' }))));
@@ -752,7 +889,7 @@ function startLive(s, after) {
     main.appendChild(kindBody(d));
     const cue = d.note || (v && v.note) || '';
     if (cue) main.appendChild(el('p.lcue', { text: cue }));
-    paintFoot();
+    view.append(main, footer(d));
   }
 
   function kindBody(d) {
@@ -780,40 +917,78 @@ function startLive(s, after) {
       const frac = ph.end ? 1 : 1 - left / part;
       fg.setAttribute('stroke-dashoffset', (C * (1 - frac)).toFixed(1));
       ring.classList.toggle('rest', d.kind === 'interval' && !ph.end && !ph.work);
-      phase.textContent = ph.end ? 'הסתיים' : d.kind === 'interval' ? (ph.work ? 'עבודה' : 'מנוחה') : (running ? 'רץ' : (d.secs ? 'בהפסקה' : 'מוכן'));
+      ring.classList.toggle('held', !ph.end && !running && !!d.secs);
+      const what = d.kind === 'interval' ? (ph.work ? 'עבודה' : 'מנוחה') : 'רץ';
+      phase.textContent = ph.end ? 'הסתיים' : running ? what : d.secs ? 'בהשהיה' : 'מוכן';
       big.textContent = clock(ph.end ? 0 : Math.ceil(left));
       rnd.textContent = d.kind === 'interval' && !ph.end ? 'סבב ' + ph.round + ' מתוך ' + d.rounds : '';
     };
     refresh();
     box.appendChild(ring);
-    if (!phaseAt(d, d.secs || 0).end) {
-      box.appendChild(el('div.lctrl', null,
-        el('button.lbig', { type: 'button', 'aria-label': running ? 'עצירה' : 'התחלה', onclick: toggleRun }, icon(running ? 'pause' : 'play')),
-        d.secs ? el('button.btn.quiet.sm', { type: 'button', text: 'מההתחלה', onclick: () => { d.secs = 0; running = false; store(); paint(); } }) : null));
+    const ctrl = el('div.lctrl');
+    if (phaseAt(d, d.secs || 0).end) {
+      /* נגמר — אפשר שוב, בנגיעה אחת שגם מתחילה */
+      ctrl.appendChild(el('button.btn', { type: 'button', onclick: calm(() => { d.secs = 0; startRun(); store(); paint(); }) }, icon('play'), 'שוב מההתחלה'));
+    } else {
+      ctrl.appendChild(el('button.lbig', { type: 'button', 'aria-label': running ? 'השהיה' : d.secs ? 'להמשיך' : 'התחלה', onclick: calm(toggleRun) }, icon(running ? 'pause' : 'play')));
+      if (d.secs) ctrl.appendChild(el('button.btn.quiet.sm', { type: 'button', text: 'מההתחלה', onclick: calm(() => { d.secs = 0; running = false; store(); paint(); }) }));
     }
+    box.appendChild(ctrl);
     return box;
   }
 
-  /* חזרות: סט אחרי סט, כפתור ענק — אפשר ללחוץ גם עם כדור ביד השנייה */
+  /* חזרות: סט אחרי סט, כפתור ענק — אפשר ללחוץ גם עם כדור ביד השנייה. אחרי
+     סט — מנוחה (אם הוגדרה) עם צפצוף לסט הבא. ביטול הסט האחרון תמיד אפשרי,
+     גם אחרי האחרון: קודם תרגיל שהושלם ננעל, ולחיצה כפולה לא תוקנה */
   function repsBody(d) {
     const box = el('div.lreps');
-    const doneSets = d.setsDone || 0;
+    const done = Math.min(d.setsDone || 0, d.sets);
+    const all = done >= d.sets;
+    const resting = !all && restLeft(d) > 0;
     const dots = el('div.ldots');
-    for (let i = 0; i < d.sets; i++) dots.appendChild(el('i' + (i < doneSets ? '.on' : '')));
-    box.append(el('b.tbig.num', { text: doneSets >= d.sets ? 'כל הסטים' : 'סט ' + (doneSets + 1) + ' מתוך ' + d.sets }),
-      el('span.lsub.num', { text: d.reps + ' חזרות בכל סט' }), dots);
-    if (doneSets < d.sets) {
-      box.appendChild(el('button.lhuge', { type: 'button', onclick: () => {
-        d.setsDone = doneSets + 1;
-        if (!running) startRun();
-        if (d.setsDone >= d.sets) { sound.end(); finishDrill(); return; }
-        sound.tick();
-        store();
-        paint();
-      } }, icon('check'), 'סט הושלם'));
-      if (doneSets) box.appendChild(el('button.btn.quiet.sm', { type: 'button', text: 'ביטול הסט האחרון', onclick: () => { d.setsDone = doneSets - 1; store(); paint(); } }));
+    for (let i = 0; i < d.sets; i++) dots.appendChild(el('i' + (i < done ? '.on' : '')));
+    if (resting) {
+      const t = el('b.tbig.num');
+      box.append(el('span.tphase.rest', { text: 'מנוחה' }), t, el('span.lsub.num', { text: 'ואז סט ' + (done + 1) + ' מתוך ' + d.sets }), dots);
+      refresh = () => { t.textContent = clock(Math.ceil(restLeft(d))); };
+      refresh();
+    } else {
+      box.append(el('b.tbig.num', { text: all ? 'כל הסטים' : 'סט ' + (done + 1) + ' מתוך ' + d.sets }),
+        el('span.lsub.num', { text: d.reps + ' חזרות בכל סט' }), dots);
     }
+    if (!all) box.appendChild(el('button.lhuge', { type: 'button', onclick: calm(() => setDone(d)) }, icon('check'), 'סט ' + (done + 1) + ' הושלם'));
+    const row = el('div.lrow');
+    if (done) row.appendChild(el('button.btn.quiet.sm', { type: 'button', text: 'ביטול הסט האחרון', onclick: calm(() => undoSet(d)) }));
+    if (resting) row.appendChild(el('button.btn.quiet.sm', { type: 'button', text: 'בלי מנוחה', onclick: calm(() => { d.restTo = 0; store(); paint(); }) }));
+    if (row.children.length) box.appendChild(row);
     return box;
+  }
+
+  function setDone(d) {
+    unlockAudio();
+    d.setsDone = Math.min(d.sets, (d.setsDone || 0) + 1);
+    d.restTo = 0;
+    if (d.setsDone >= d.sets) {
+      /* הסט האחרון: התרגיל בוצע ונשאר על המסך, עם "לתרגיל הבא" — כמו שעון שנגמר */
+      d.done = true;
+      sound.end();
+    } else {
+      sound.tick();
+      if (d.setRest > 0) d.restTo = Date.now() + d.setRest * 1000;
+    }
+    store();
+    paint();
+  }
+
+  function undoSet(d) {
+    const n = Math.min(d.setsDone || 0, d.sets);
+    if (!n) return;
+    /* מה שסימן "בוצע" היה הסט האחרון — בלעדיו התרגיל עוד לא נגמר */
+    if (n >= d.sets) d.done = false;
+    d.setsDone = n - 1;
+    d.restTo = 0;
+    store();
+    paint();
   }
 
   /* אתגר: ספירה בכפתור ענק, או הקלדה בסוף כשהידיים היו עסוקות; השיא הקודם
@@ -833,7 +1008,8 @@ function startLive(s, after) {
       refresh = () => { const p2 = phaseAt(d, d.secs || 0); t.textContent = clock(p2.end ? 0 : Math.ceil(p2.left)); };
       refresh();
       box.appendChild(el('div.lclock', null, t,
-        ph.end ? el('span', { text: 'הזמן נגמר' }) : el('button.lsmall', { type: 'button', 'aria-label': running ? 'עצירה' : 'התחלה', onclick: toggleRun }, icon(running ? 'pause' : 'play'))));
+        ph.end ? el('span', { text: 'הזמן נגמר' })
+          : el('button.lsmall', { type: 'button', 'aria-label': running ? 'השהיה' : d.secs ? 'להמשיך' : 'התחלה', onclick: calm(toggleRun) }, icon(running ? 'pause' : 'play'))));
     }
     box.append(el('b.tcount.num', { text: String(n) }), el('span.lsub', { text: d.unit || 'פעמים' }));
     const set = x => {
@@ -843,31 +1019,36 @@ function startLive(s, after) {
       store();
       paint();
     };
-    box.appendChild(el('button.lplus', { type: 'button', dir: 'ltr', 'aria-label': 'עוד אחד', onclick: () => { if (d.limit && !running && !d.secs) startRun(); set(n + 1); } }, '+1'));
+    box.appendChild(el('button.lplus', { type: 'button', dir: 'ltr', 'aria-label': 'עוד אחד', onclick: () => { if (d.limit && !running && !d.secs) startRun(); set((d.result || 0) + 1); } }, '+1'));
     const typed = el('input.inp.ltype.num', { type: 'number', inputmode: 'numeric', min: '0', id: 'l-type', placeholder: 'הקלדה' });
     typed.onchange = () => { const x = parseInt(typed.value, 10); if (!isNaN(x)) set(x); };
-    box.appendChild(el('div.lrow', null, el('button.btn.sm', { type: 'button', dir: 'ltr', 'aria-label': 'אחד פחות', onclick: () => set(n - 1) }, '−1'), typed));
+    const row = el('div.lrow', null, el('button.btn.sm', { type: 'button', dir: 'ltr', 'aria-label': 'אחד פחות', onclick: () => set((d.result || 0) - 1) }, '−1'), typed);
+    /* ניסיון חדש: השעון והספירה מאפס */
+    if (!running && (d.secs || n)) row.appendChild(el('button.btn.quiet.sm', { type: 'button', text: 'ניסיון חדש', onclick: calm(() => { d.secs = 0; d.result = 0; d.done = false; store(); paint(); }) }));
+    box.appendChild(row);
     return box;
   }
 
-  function paintFoot() {
-    foot.textContent = '';
-    const d = cur();
-    const next = s.drills[s.cur + 1];
+  /* "סיימנו" — נגיעה אחת מסמנת ועוברת לתרגיל הבא שעוד לא נעשה (הידיים
+     עסוקות). תרגיל שנגמר לבד נשאר על המסך עם "לתרגיל הבא", כי אולי אף אחד
+     לא הסתכל. אין תרגיל פתוח אחריו — לסיכום */
+  function footer(d) {
+    const to = nextOpen(s, s.cur);
+    const nx = to >= 0 ? s.drills[to] : null;
     const info = el('div.lnext', null,
-      el('small', { text: next ? 'הבא' : 'זה התרגיל האחרון' }),
-      next ? el('b', null, nameOf(next) + ' · ', el('span.num', { text: measure(next) })) : null);
-    const lastOne = !next;
-    const btn = el('button.btn' + (d.done || lastOne ? '.gold' : ''), { type: 'button', onclick: () => {
-      if (!d.done) finishDrill(true); else if (lastOne) finishSession(); else go(s.cur + 1);
-    } }, d.done ? (lastOne ? 'סיום האימון' : 'לתרגיל הבא') : 'סיימנו', icon(d.done && !lastOne ? 'next' : 'check'));
-    foot.append(info, btn);
+      el('small', { text: nx ? 'הבא' : 'אחרי זה — סיום האימון' }),
+      nx ? el('b', null, nameOf(nx) + ' · ', el('span.num', { text: measure(nx) })) : null);
+    const btn = el('button.btn' + (d.done ? '.gold' : ''), { type: 'button', onclick: calm(() => {
+      if (!d.done) { running = false; d.done = true; d.restTo = 0; }
+      const j = nextOpen(s, s.cur);
+      if (j < 0) finish(); else go(j);
+    }) }, !d.done ? 'סיימנו' : nx ? 'לתרגיל הבא' : 'סיום האימון', icon(d.done && nx ? 'next' : 'check'));
+    return el('div.lfoot', null, info, btn);
   }
 
   function toggleRun() {
-    unlockAudio();
-    if (running) { running = false; store(); paint(); return; }
-    startRun();
+    if (running) running = false; else startRun();
+    store();
     paint();
   }
   function startRun() {
@@ -876,81 +1057,193 @@ function startLive(s, after) {
     last = Date.now();
   }
 
-  /* "סיימנו" — נגיעה אחת מסמנת ועוברת לתרגיל הבא (הידיים עסוקות). תרגיל
-     שנגמר לבד נשאר על המסך עם "לתרגיל הבא", כי אולי אף אחד לא הסתכל */
-  function finishDrill(manual) {
-    const d = cur();
-    running = false;
-    d.done = true;
-    store();
-    if (manual) {
-      if (s.drills[s.cur + 1]) go(s.cur + 1); else finishSession();
-      return;
-    }
-    paint();
-  }
-
+  /* מעבר תרגיל עוצר את השעון של הקודם; הזמן שלו נשמר, וחוזרים אליו כמו שהיה */
   function go(i) {
     if (i < 0 || i >= s.drills.length) return;
     running = false;
     s.cur = i;
     store();
     paint();
+    layer.scrollTop = 0;
   }
 
   /* הסרטון: טיימר התרגיל עוצר, הכולל ממשיך. סגירת הנגן מחזירה לכאן */
   function watch(v) {
+    if (!getVideo(v.id)) { paint(); return; }
     watching = true;
-    openVideo(v.id, () => { watching = false; last = Date.now(); paint(); });
+    store();
+    openVideo(v.id, () => {
+      if (closed) return;
+      watching = false;
+      last = Date.now();
+      store();
+      paint();
+    });
   }
 
-  function advance(dt) {
-    const d = cur();
-    if (d.done) { running = false; return; }
+  /** מקדם את שעון התרגיל. true — אם צייר את המסך מחדש */
+  function advance(d, dt) {
     const before = phaseAt(d, d.secs || 0);
+    if (before.end || before.open) { running = false; return false; }
     d.secs = (d.secs || 0) + dt;
     const now = phaseAt(d, d.secs);
-    if (now.end && !before.end) {
-      sound.end();
-      finishDrill(false);
-      return;
+    /* צפצוף שמאחר (חזרה מטלפון נעול) כבר לא אומר כלום */
+    const loud = dt < 2;
+    if (now.end) {
+      /* לא יותר מהמתוכנן: אחרי טלפון נעול נרשם "10:00" לתרגיל של 5 דקות */
+      d.secs = plannedSecs(d);
+      running = false;
+      d.done = true;
+      if (loud) sound.end();
+      store();
+      paint();
+      return true;
     }
+    if (!loud) return false;
     if (d.kind === 'interval' && (now.work !== before.work || now.round !== before.round)) {
       if (now.work) sound.work(); else sound.rest();
-    } else if (!now.open && !before.open && Math.ceil(now.left) !== Math.ceil(before.left) && Math.ceil(now.left) <= 3) {
+    } else if (Math.ceil(now.left) !== Math.ceil(before.left) && Math.ceil(now.left) <= 3) {
       sound.tick();
     }
+    return false;
+  }
+
+  /* המנוחה בין סטים: 3-2-1 וצפצוף "לעבודה" כשנגמרת */
+  function restTick(d, dt) {
+    const left = restLeft(d);
+    if (left <= 0) {
+      /* מנוחה שנגמרה מזמן (היינו בתרגיל אחר, או שהטלפון ננעל) — בלי צפצוף
+         מאוחר שאומר "עכשיו" כשזה לא עכשיו */
+      const late = (Date.now() - d.restTo) / 1000;
+      d.restTo = 0;
+      if (late < 2) sound.work();
+      store();
+      paint();
+      return;
+    }
+    if (dt < 2 && Math.ceil(left) !== Math.ceil(left + dt) && Math.ceil(left) <= 3) sound.tick();
+    if (refresh) refresh();
   }
 
   function tick() {
+    if (closed) return;
+    /* ברקע לא סופרים. באייפון הדף מושהה ממילא; באנדרואיד הטיימרים ממשיכים
+       פעם בדקה, וכל דקה נראתה כמו המשך — לילה שלם נספר כזמן אימון. החזרה
+       לחזית רואה את כל הפער בבת אחת, ומחליטה עליו (GAP) */
+    if (document.visibilityState === 'hidden') return;
     const t = Date.now();
+    /* המסך נשאר פתוח ברקע לילה שלם: זה לא זמן אימון ולא זמן תרגיל */
+    if (t - last > GAP) {
+      if (mode === 'live' && last > openedAt) s.activeSecs = (s.activeSecs || 0) + (last - openedAt) / 1000;
+      openedAt = t;
+      last = t;
+      running = false;
+      store();
+      paint();
+      return;
+    }
     const dt = (t - last) / 1000;
     last = t;
+    if (mode !== 'live') return;
     paintTotal();
+    const d = cur();
+    if (d.kind === 'reps') { if (d.restTo) restTick(d, dt); }
+    else if (running && !watching) { if (!advance(d, dt) && refresh) refresh(); }
     /* דופק גם כשאף תרגיל לא רץ — הוא מה שמשחזר את הזמן אם האפליקציה נסגרה */
-    if (!finished && t - savedAt > 5000) store();
-    if (!running || watching || finished) return;
-    const was = cur().done;
-    advance(dt);
-    if (finished) return;
-    /* מעבר מצב (נגמר) — ציור מלא; אחרת רק השעון */
-    if (cur().done !== was) paint();
-    else if (refresh) refresh();
     if (Date.now() - savedAt > 5000) store();
   }
 
-  function finishSession() {
-    bank();
-    finished = true;
-    running = false;
-    clearInterval(timer);
-    s.endedAt = Date.now();
-    s.totalSecs = Math.round(s.activeSecs);
-    s.liveAt = 0;
-    store();
-    summary(s, layer, close);
+  /* "עצירה": מה שהמשתמש קורא לו עצירה הוא אחד משניים — לסיים עכשיו ולשמור
+     את מה שנעשה, או לצאת ולחזור אחר כך. שואלים, בשכבה עצמה (גיליון רגיל
+     יושב מתחת לשכבה הזו) */
+  function stopMenu() {
+    if (offMenu || mode !== 'live') return;
+    const dim = el('div.lmdim');
+    const box = el('div.lmenu', { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'עצירת האימון' });
+    let offEsc = null;
+    const shut = () => { dim.remove(); box.remove(); if (offEsc) offEsc(); offMenu = null; };
+    const pick = fn => () => { shut(); fn(); };
+    const done = s.drills.filter(x => x.done).length;
+    box.append(
+      el('b.lmt', { text: 'לעצור את האימון?' }),
+      el('small.lms.num', { text: done + ' מתוך ' + s.drills.length + ' תרגילים בוצעו · ' + clock(elapsed()) }),
+      el('button.btn.gold.wide', { type: 'button', onclick: pick(finish) }, icon('check'), 'לסיים — לסיכום ולשמירה ביומן'),
+      el('button.btn.wide', { type: 'button', onclick: pick(() => close()) }, icon('x'), 'לצאת — ולהמשיך אחר כך'),
+      el('button.btn.quiet.wide', { type: 'button', text: 'לא, ממשיכים', onclick: shut }));
+    dim.onclick = shut;
+    offMenu = shut;
+    offEsc = onEscape(shut);
+    layer.append(dim, box);
   }
 
+  function finish() {
+    if (mode !== 'live') return;
+    bank();
+    running = false;
+    mode = 'sum';
+    s.endedAt = Date.now();
+    s.totalSecs = Math.round(s.activeSecs || 0);
+    store();
+    syncNow();
+    letSleep();
+    paint();
+    layer.scrollTop = 0;
+  }
+
+  /* מהסיכום חזרה לאימון — "סיום" בטעות, או שנזכרו בתרגיל שדילגו עליו.
+     הזמן בסיכום אינו זמן אימון */
+  function backToLive() {
+    if (mode !== 'sum') return;
+    mode = 'live';
+    s.endedAt = 0;
+    openedAt = Date.now();
+    last = Date.now();
+    running = false;
+    keepAwake();
+    store();
+    paint();
+    layer.scrollTop = 0;
+  }
+
+  /* הסיכום: ציון 1–5 והערה לכל תרגיל, והאימון עובר ליומן. האימון השמור
+     שממנו התחילו לא נוגעים בו: מה שהשתנה במגרש נשאר כאן */
+  function paintSum() {
+    const done = s.drills.filter(d => d.done).length;
+    view.appendChild(el('div.ltop', null,
+      el('button.lx', { type: 'button', 'aria-label': 'סגירה — אפשר לשמור ביומן אחר כך', onclick: () => close() }, icon('x'), 'סגירה'),
+      el('button.btn.sm.lback', { type: 'button', onclick: calm(backToLive) }, icon('back'), 'חזרה לאימון')));
+    const wrap = el('div.lsum');
+    wrap.append(el('h2.done-h', { text: 'כל הכבוד!' }),
+      el('p.done-p.num', { text: done + ' מתוך ' + s.drills.length + ' תרגילים · ' + clock(s.totalSecs) }));
+    newRecords(s).forEach(x => wrap.appendChild(el('div.card.rec', null, icon('cup'),
+      el('b', null, 'שיא חדש: ' + nameOf(x.d, 'אתגר') + ' ', el('span.num', { text: String(x.d.result) }), x.was ? ' (היה ' + x.was.value + ')' : ''))));
+    wrap.appendChild(el('p.hint.left', { text: 'ציון 1–5 והערה לכל תרגיל — יופיעו ביומן, גם אצל הבן.' }));
+    wrap.appendChild(resultRows(s, true, () => putSession(s)));
+    const note = el('textarea.inp', { id: 's-note', rows: 3, placeholder: 'הערה כללית — מה היה טוב, ומה לשפר בפעם הבאה' });
+    note.value = s.note || '';
+    note.onchange = () => { s.note = note.value.trim(); putSession(s); };
+    wrap.appendChild(note);
+    let used = false;
+    const keep = () => {
+      if (used) return;
+      used = true;
+      s.note = note.value.trim();
+      s.status = 'done';
+      putSession(s);
+      close();
+      const from = s.from && getSession(s.from);
+      toast(from && from.status === 'template' ? 'נשמר ביומן. "' + savedName(from) + '" נשאר באימונים השמורים' : 'האימון נשמר ביומן');
+      /* סגירת השכבה שולחת "חזרה" אסינכרונית — ניווט מיד אחריה היה מתבטל */
+      afterLayers(() => { location.hash = '#/v/h/' + s.id; });
+    };
+    wrap.appendChild(el('button.btn.gold.wide', { type: 'button', text: 'שמירה ביומן', onclick: keep }));
+    view.appendChild(wrap);
+  }
+
+  document.body.appendChild(layer);
+  liveId = s.id;
+  if (mode === 'live') keepAwake();
+  store();
   paint();
   timer = setInterval(tick, 250);
 }
@@ -1002,49 +1295,6 @@ function newRecords(s) {
   return s.drills.filter(d => d.kind === 'challenge' && d.done && typeof d.result === 'number' && d.result > 0)
     .map(d => ({ d, was: before.get(recKey(d)) }))
     .filter(x => !x.was || x.d.result > x.was.value);
-}
-
-function summary(s, layer, close) {
-  layer.textContent = '';
-  layer.classList.add('sum');
-  const done = s.drills.filter(d => d.done).length;
-  const wrap = el('div.lsum');
-  wrap.append(el('h2.done-h', { text: 'כל הכבוד!' }),
-    el('p.done-p.num', { text: done + ' מתוך ' + s.drills.length + ' תרגילים · ' + clock(s.totalSecs) }));
-  newRecords(s).forEach(x => wrap.appendChild(el('div.card.rec', null, icon('cup'),
-    el('b', null, 'שיא חדש: ' + nameOf(x.d, 'אתגר') + ' ', el('span.num', { text: String(x.d.result) }), x.was ? ' (היה ' + x.was.value + ')' : ''))));
-  wrap.appendChild(el('p.hint.left', { text: 'ציון 1–5 והערה לכל תרגיל — יופיעו ביומן, גם אצל הבן.' }));
-  const store = () => putSession(s);
-  wrap.appendChild(resultRows(s, true, store));
-  const note = el('textarea.inp', { id: 's-note', rows: 3, placeholder: 'הערה כללית — מה היה טוב, ומה לשפר בפעם הבאה' });
-  note.value = s.note || '';
-  note.onchange = () => { s.note = note.value.trim(); store(); };
-  wrap.appendChild(note);
-  /* האימון השמור שממנו התחילו לא נוגעים בו: מה שהשתנה במגרש נשאר כאן */
-  const keep = () => {
-    s.note = note.value.trim();
-    s.status = 'done';
-    putSession(s);
-    syncNow();
-    close();
-    const from = s.from && getSession(s.from);
-    toast(from && from.status === 'template' ? 'נשמר ביומן. "' + savedName(from) + '" נשאר באימונים השמורים' : 'האימון נשמר ביומן');
-    /* סגירת השכבה שולחת "חזרה" אסינכרונית — ניווט מיד אחריה היה מתבטל */
-    afterLayers(() => { location.hash = '#/v/h/' + s.id; });
-  };
-  wrap.appendChild(el('button.btn.gold.wide', { type: 'button', text: 'שמירה ביומן', onclick: keep }));
-  layer.appendChild(wrap);
-  layer.scrollTop = 0;
-}
-
-/** הסיכום בלבד — לאימון שנגמר ועוד לא נשמר ביומן */
-function openSummary(s, after) {
-  const layer = el('div.live.sum', { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'סיכום האימון' });
-  let offKey = null;
-  const close = openLayer(() => { if (offKey) offKey(); putSession(s); syncNow(); layer.remove(); if (after) after(); });
-  offKey = onEscape(() => close());
-  document.body.appendChild(layer);
-  summary(s, layer, close);
 }
 
 /* --- היומן --- */
@@ -1112,13 +1362,12 @@ export function mountJournal(root, id) {
     /* מה שעבד באימון של היום נשמר כאימון לפעם הבאה */
     root.appendChild(el('button.btn', { type: 'button', onclick: () => saveAsTemplate(s) }, icon('watch'), el('span', { text: 'שמירה כאימון שמור' })));
     const del = el('button.btn.quiet.sm', { type: 'button', text: 'מחיקה מהיומן' });
-    del.onclick = () => {
-      if (!del.classList.contains('sure')) { del.classList.add('sure'); del.textContent = 'למחוק את האימון מהיומן? לחיצה נוספת'; return; }
+    confirmTap(del, 'למחוק את האימון מהיומן? לחיצה נוספת', () => {
       removeSession(s.id);
       syncNow();
       toast('נמחק מהיומן');
       location.hash = '#/v/h';
-    };
+    });
     root.appendChild(del);
   }
 

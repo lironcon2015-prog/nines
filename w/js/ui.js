@@ -166,10 +166,16 @@ export function closeAllLayers() {
   while (layers.length) layers[layers.length - 1].close(false);
 }
 
+/* Escape סוגר את השכבה העליונה בלבד, כמו "חזרה". כשכל שכבה האזינה בעצמה,
+   Escape בנגן שנפתח מתוך האימון סגר את שניהם בבת אחת */
+const escapes = [];
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && escapes.length) escapes[escapes.length - 1]();
+});
 export function onEscape(fn) {
-  const h = e => { if (e.key === 'Escape') fn(); };
-  document.addEventListener('keydown', h);
-  return () => document.removeEventListener('keydown', h);
+  const h = () => fn();
+  escapes.push(h);
+  return () => { const i = escapes.indexOf(h); if (i >= 0) escapes.splice(i, 1); };
 }
 
 /** גיליון תחתון. מחזיר {body, close}. */

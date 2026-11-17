@@ -1005,16 +1005,28 @@ h1.plan-title { border: 0; }
   background: radial-gradient(150% 46% at 80% 0%, var(--glow-a), transparent 75%), var(--bg);
   padding: calc(10px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left, 0px));
   display: flex; flex-direction: column; gap: .7rem; }
+.lview { flex: 1 0 auto; display: flex; flex-direction: column; gap: .7rem; }
 .ltop { display: flex; align-items: center; gap: .6rem; font-size: .9rem; color: var(--muted); font-weight: 700; }
-.lx { display: inline-flex; align-items: center; gap: .25rem; border: 0; background: none; padding: .3rem 0; font-weight: 700; color: var(--muted); }
+.lx { display: inline-flex; align-items: center; gap: .3rem; border: 0; background: none; padding: .45rem .1rem; font-weight: 700; color: var(--muted); }
 .lx svg { width: 16px; height: 16px; }
 .ltlabel { margin-inline-start: auto; }
 .ltotal { color: var(--text); font-size: 1rem; }
-.lcount { min-width: 3rem; text-align: end; color: var(--text); }
-.lprog { display: flex; gap: 4px; }
-.lprog button { flex: 1; height: 8px; border: 0; padding: 0; border-radius: 4px; background: var(--line-strong); }
-.lprog button.done { background: #1E9E63; }
-.lprog button.now { background: var(--gold); }
+.lcount { min-width: 3rem; text-align: end; color: var(--text); white-space: nowrap; }
+.ltop .lback { margin-inline-start: auto; }
+/* הפס: כל מקטע הוא כפתור — 8px נראים בתוך 26px של מגע (קודם 8px בלבד, וקשה
+   היה לפגוע בהם באצבע). העכשווי גבוה יותר, ומסומן גם כשהוא כבר בוצע */
+.lprog { display: flex; gap: 4px; margin: -9px 0 -6px; }
+.lprog button { flex: 1; min-width: 0; height: 26px; border: 0; padding: 0; background: none; position: relative; }
+.lprog button::before { content: ""; position: absolute; inset-inline: 0; top: 9px; height: 8px; border-radius: 4px; background: var(--line-strong); }
+.lprog button.done::before { background: #1E9E63; }
+.lprog button.now::before { background: var(--gold); top: 7px; height: 12px; border-radius: 6px; }
+.lprog button.done.now::before { background: #1E9E63; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--gold); }
+.lhead { display: flex; align-items: center; gap: .5rem; }
+.lnav { width: 44px; height: 44px; flex: none; border-radius: 50%; border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--text); display: grid; place-items: center; padding: 0; }
+.lnav svg { width: 20px; height: 20px; }
+.lnav:disabled { opacity: .28; }
+.lhead .ltitle { flex: 1; min-width: 0; text-align: center; }
+.ltitle .i.ok { width: .8em; height: .8em; color: #1E9E63; vertical-align: -.06em; margin-inline-end: .3rem; }
 .lmain { display: flex; flex-direction: column; gap: .7rem; flex: 1; }
 .ltitle { font-size: 1.45rem; line-height: 1.2; margin: 0; }
 .lvid { display: flex; align-items: center; gap: .7rem; padding: .5rem; text-align: start; width: 100%; color: var(--text); }
@@ -1024,7 +1036,7 @@ h1.plan-title { border: 0; }
 .lvid b svg { width: 15px; height: 15px; color: var(--gold-text); }
 .lvid small { font-size: .78rem; color: var(--muted); }
 .ltimer { display: grid; justify-items: center; gap: .6rem; }
-.tring { position: relative; width: min(64vw, 250px); aspect-ratio: 1; display: grid; place-items: center; }
+.tring { position: relative; width: min(64vw, 250px, 36vh); aspect-ratio: 1; display: grid; place-items: center; }
 .tring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
 .tring circle { fill: none; stroke-width: 7; }
 .tring .bg { stroke: var(--line); }
@@ -1033,6 +1045,8 @@ h1.plan-title { border: 0; }
 .rin { position: relative; display: grid; justify-items: center; gap: .1rem; }
 .tphase { font-size: .95rem; font-weight: 800; color: var(--gold-text); }
 .tring.rest .tphase { color: var(--blue); }
+.tring.held .fg { opacity: .45; }
+.tring.held .tphase { color: var(--muted); }
 .tbig { font-size: clamp(3rem, 16vw, 4.4rem); line-height: 1; font-weight: 700; }
 .rnd { font-size: .9rem; color: var(--muted); font-weight: 600; }
 .lctrl { display: flex; align-items: center; gap: 1rem; }
@@ -1044,6 +1058,7 @@ h1.plan-title { border: 0; }
 .lreps, .lchal { display: grid; justify-items: center; gap: .5rem; text-align: center; }
 .lreps .tbig { font-size: clamp(2.2rem, 11vw, 3rem); }
 .lsub { font-size: .95rem; color: var(--muted); font-weight: 600; }
+.lreps .tphase.rest, .lreps .tphase.rest + .tbig { color: var(--blue); }
 .ldots { display: flex; gap: .5rem; }
 .ldots i { width: 16px; height: 16px; border-radius: 50%; background: var(--line-strong); }
 .ldots i.on { background: #1E9E63; }
@@ -1060,13 +1075,40 @@ h1.plan-title { border: 0; }
 .tcount { font-size: clamp(4rem, 24vw, 6rem); line-height: 1; font-weight: 700; }
 .lplus { width: 136px; height: 136px; border-radius: 50%; border: 0; font-family: Rubik, sans-serif; font-size: 2.6rem; font-weight: 700; color: var(--on-gold);
   background: linear-gradient(180deg, var(--gold-hi), var(--gold-lo)); box-shadow: 0 16px 34px -12px var(--gold-glow); }
-.lrow { display: flex; gap: .5rem; align-items: center; }
+.lrow { display: flex; flex-wrap: wrap; justify-content: center; gap: .5rem; align-items: center; }
 .ltype { width: 7rem; height: 36px; text-align: center; }
-.lfoot { display: flex; align-items: center; gap: .7rem; padding: .7rem .8rem; border-radius: 18px; background: var(--surface-solid); border: 1px solid var(--line); box-shadow: 0 6px 18px rgba(15, 26, 43, .08); }
+.lfoot { position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; gap: .7rem; padding: .7rem .8rem; border-radius: 18px; background: var(--surface-solid); border: 1px solid var(--line); box-shadow: 0 6px 18px rgba(15, 26, 43, .08); }
 .lnext { flex: 1; min-width: 0; display: grid; }
 .lnext small { font-size: .78rem; color: var(--muted); }
 .lnext b { font-size: .92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lfoot .btn { width: auto; min-width: 7.5rem; }
+
+/* טלפון נמוך (SE ודומיו): הטבעת והכפתור קטנים, כדי שההערה לא תיבלע מתחת לשורה התחתונה */
+@media (max-height: 720px) {
+  .lview { gap: .55rem; }
+  .tring { width: min(56vw, 30vh); }
+  .lbig { width: 72px; height: 72px; }
+  .lvid .pv { width: 44px; height: 54px; }
+  .lhuge { height: 84px; }
+  .lplus { width: 116px; height: 116px; }
+}
+@media (max-height: 600px) {
+  .tring { width: min(52vw, 27vh); }
+  .tbig { font-size: 2.6rem; }
+  .lvid { padding: .35rem; }
+  .lvid small { display: none; }
+  .lhuge { height: 72px; }
+  .lplus { width: 96px; height: 96px; font-size: 2.1rem; }
+  .tcount { font-size: 3.4rem; }
+  .ltitle { font-size: 1.25rem; }
+}
+
+/* "עצירה": תפריט בתוך השכבה — גיליון רגיל (51) יושב מתחת לה (55) */
+.lmdim { position: fixed; inset: 0; z-index: 3; background: var(--scrim); }
+.lmenu { position: fixed; z-index: 4; inset-inline: 0; bottom: 0; margin: 0 auto; max-width: var(--shell); display: grid; gap: .6rem;
+  padding: 1.1rem var(--pad) calc(1rem + env(safe-area-inset-bottom)); background: var(--surface-solid); border: 1px solid var(--line-strong); border-bottom: 0; border-radius: 26px 26px 0 0; }
+.lmt { font-size: 1.15rem; text-align: center; }
+.lms { text-align: center; color: var(--muted); font-size: .85rem; margin: -.3rem 0 .2rem; }
 
 /* הסיכום, ושורות התוצאה ביומן */
 .lsum { display: flex; flex-direction: column; gap: .7rem; }

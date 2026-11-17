@@ -46,5 +46,10 @@ else
   echo "· node אינו מותקן, בדיקות היחידה לא רצו"
 fi
 
+# מסך האימון בדפדפן אמיתי — רק כשהשתנה קוד. בלי Playwright הוא מדלג ואומר את זה
+if [ -n "$touched" ] && command -v node >/dev/null; then
+  node tools-train.mjs || fail=1
+fi
+
 [ $fail -eq 0 ] && echo "✓ מוכן לפרסום"
 exit $fail
